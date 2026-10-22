@@ -94,7 +94,7 @@ export const FiszkaCard: React.FC<FiszkaCardProps> = ({
           )}
         </div>
 
-        {/* Row 2: Dimension / Size ("6x80 mm") - MOCNO POGRUBIONY */}
+        {/* Row 2: Dimension / Size ("6x80 mm") - WYRAŹNIE MOCNO POGRUBIONY */}
         <div className="w-full">
           {!isPrintMode ? (
             <input
@@ -102,23 +102,25 @@ export const FiszkaCard: React.FC<FiszkaCardProps> = ({
               value={item.dimension}
               onChange={(e) => handleTextChange('dimension', e.target.value)}
               placeholder="6x80 mm"
-              className="w-full font-black text-black bg-transparent border-b border-transparent hover:border-slate-300 focus:border-emerald-600 focus:bg-emerald-50/40 focus:outline-none transition-colors px-1 py-0.5 rounded-xs tracking-tight"
+              className="w-full text-black bg-transparent border-b border-transparent hover:border-slate-300 focus:border-emerald-600 focus:bg-emerald-50/40 focus:outline-none transition-colors px-1 py-0.5 rounded-xs tracking-tight"
               style={{
-                fontSize: '5.5mm',
+                fontSize: '5.8mm',
                 lineHeight: 1.1,
-                fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
+                fontFamily: "'Plus Jakarta Sans', 'Inter', sans-serif",
                 fontWeight: 900,
+                WebkitTextStroke: '0.35px #000000',
               }}
               title="Kliknij, aby zmienić wymiar"
             />
           ) : (
             <div
-              className="font-black text-black truncate px-1 tracking-tight"
+              className="text-black truncate px-1 tracking-tight"
               style={{
-                fontSize: '5.5mm',
+                fontSize: '5.8mm',
                 lineHeight: 1.1,
-                fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
+                fontFamily: "'Plus Jakarta Sans', 'Inter', sans-serif",
                 fontWeight: 900,
+                WebkitTextStroke: '0.35px #000000',
               }}
             >
               {item.dimension || '6x80 mm'}
@@ -126,22 +128,23 @@ export const FiszkaCard: React.FC<FiszkaCardProps> = ({
           )}
         </div>
 
-        {/* Row 3: Zielony pasek - cały napis pogrubiony i numer mocno pogrubiony */}
+        {/* Row 3: Zielony pasek - cały napis WYRAŹNIE pogrubiony i numer WYRAŹNIE pogrubiony */}
         <div
           className="flex items-center justify-between rounded-lg px-[3.5mm] py-[1mm]"
           style={{
             backgroundColor: settings.badgeColor || '#d7f5c5',
-            minHeight: '12mm',
-            maxHeight: '12.5mm',
+            minHeight: '12.2mm',
+            maxHeight: '12.8mm',
           }}
         >
           <div className="flex items-center select-none">
             <span
-              className="font-black text-black tracking-tight"
+              className="text-black tracking-tight"
               style={{
-                fontSize: '4.4mm',
-                fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
+                fontSize: '4.6mm',
+                fontFamily: "'Plus Jakarta Sans', 'Inter', sans-serif",
                 fontWeight: 900,
+                WebkitTextStroke: '0.25px #000000',
               }}
             >
               {settings.scaleLabelText || 'Wpisz na wadze:'}
@@ -155,21 +158,25 @@ export const FiszkaCard: React.FC<FiszkaCardProps> = ({
                 value={item.scaleCode}
                 onChange={(e) => handleTextChange('scaleCode', e.target.value)}
                 placeholder="247"
-                className="w-[32mm] text-right font-black font-mono text-black bg-transparent border-b border-transparent hover:border-slate-500 focus:border-black focus:bg-white/40 focus:outline-none px-1 rounded-xs tracking-tight tabular-nums"
+                className="w-[33mm] text-right font-mono text-black bg-transparent border-b border-transparent hover:border-slate-500 focus:border-black focus:bg-white/40 focus:outline-none px-1 rounded-xs tracking-tight tabular-nums"
                 style={{
-                  fontSize: '8.2mm',
+                  fontSize: '8.8mm',
                   lineHeight: 1,
+                  fontFamily: "'JetBrains Mono', monospace",
                   fontWeight: 900,
+                  WebkitTextStroke: '0.45px #000000',
                 }}
                 title="Kliknij, aby zmienić numer na wadze"
               />
             ) : (
               <span
-                className="font-black font-mono text-black text-right tracking-tight tabular-nums px-1"
+                className="font-mono text-black text-right tracking-tight tabular-nums px-1"
                 style={{
-                  fontSize: '8.2mm',
+                  fontSize: '8.8mm',
                   lineHeight: 1,
+                  fontFamily: "'JetBrains Mono', monospace",
                   fontWeight: 900,
+                  WebkitTextStroke: '0.45px #000000',
                 }}
               >
                 {item.scaleCode || '247'}

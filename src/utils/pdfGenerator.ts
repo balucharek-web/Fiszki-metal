@@ -122,25 +122,25 @@ export async function generateFillablePdf(
     });
     nameField.setFontSize(14);
 
-    // Field 2: Wymiar (np. "6x80 mm") - MOCNO POGRUBIONY I WIĘKSZY
+    // Field 2: Wymiar (np. "6x80 mm") - WYRAŹNIE MOCNO POGRUBIONY I WIĘKSZY
     const dimField = form.createTextField(`fiszka_${i + 1}_wymiar`);
     dimField.setText(item.dimension || '6x80 mm');
     dimField.setAlignment(TextAlignment.Left);
     dimField.addToPage(page, {
       x: middleX,
-      y: yBottom + 14.5 * MM_TO_PT,
+      y: yBottom + 14 * MM_TO_PT,
       width: middleWidth,
-      height: 10.5 * MM_TO_PT,
+      height: 11 * MM_TO_PT,
       borderWidth: 0,
       font: customFontBold,
     });
-    dimField.setFontSize(16.5);
+    dimField.setFontSize(18);
 
     // Field 3: Zaokrąglony zielony pasek z numerem wagi (#d7f5c5)
     const badgeX = middleX;
-    const badgeY = yBottom + 2 * MM_TO_PT;
+    const badgeY = yBottom + 1.8 * MM_TO_PT;
     const badgeWidth = middleWidth;
-    const badgeHeight = 12 * MM_TO_PT;
+    const badgeHeight = 12.2 * MM_TO_PT;
     const badgeR = 2.5 * MM_TO_PT;
     const greenColor = rgb(0.843, 0.961, 0.773);
 
@@ -157,8 +157,8 @@ export async function generateFillablePdf(
     if (customFontBold) {
       page.drawText('Wpisz na wadze:', {
         x: badgeX + 3.5 * MM_TO_PT,
-        y: badgeY + 3.8 * MM_TO_PT,
-        size: 13,
+        y: badgeY + 4 * MM_TO_PT,
+        size: 13.5,
         font: customFontBold,
         color: rgb(0, 0, 0),
       });
@@ -169,14 +169,14 @@ export async function generateFillablePdf(
     scaleField.setText(item.scaleCode || '247');
     scaleField.setAlignment(TextAlignment.Right);
     scaleField.addToPage(page, {
-      x: badgeX + badgeWidth - 32 * MM_TO_PT,
+      x: badgeX + badgeWidth - 34 * MM_TO_PT,
       y: badgeY + 1 * MM_TO_PT,
-      width: 30 * MM_TO_PT,
-      height: 10.5 * MM_TO_PT,
+      width: 32 * MM_TO_PT,
+      height: 11 * MM_TO_PT,
       borderWidth: 0,
       font: customFontBold,
     });
-    scaleField.setFontSize(25);
+    scaleField.setFontSize(26);
 
     // Set widget background to matching green (eliminates any white cutout box!)
     scaleField.acroField.getWidgets().forEach((w) => {
