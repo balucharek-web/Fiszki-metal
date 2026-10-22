@@ -1,6 +1,5 @@
 import React from 'react';
 import { FiszkaItem, SheetSettings } from '../types/label';
-import { StandersLogo } from './StandersLogo';
 
 interface FiszkaCardProps {
   item: FiszkaItem;
@@ -44,27 +43,25 @@ export const FiszkaCard: React.FC<FiszkaCardProps> = ({
     >
       {/* Subtle index mark for screen */}
       {!isPrintMode && typeof index === 'number' && (
-        <span className="no-print absolute top-1 left-1.5 text-[8.5px] font-mono text-slate-300 select-none pointer-events-none">
+        <span className="no-print absolute top-1 left-1.5 text-[8px] font-mono text-slate-300 select-none pointer-events-none">
           #{index + 1}
         </span>
       )}
 
-      {/* 1. LEFT SECTION: Logo & Brand (38mm) */}
+      {/* 1. LEFT SECTION: 1:1 Logo STANDERS (BEZ pionowej linii dzielącej!) */}
       <div
-        className="flex flex-col items-center justify-center border-r border-slate-200/90 px-[3mm] py-[2mm] bg-white shrink-0 select-none h-full"
-        style={{ width: '38mm' }}
+        className="flex items-center justify-center px-[3mm] py-[1.5mm] bg-white shrink-0 select-none h-full"
+        style={{ width: '42mm' }}
       >
-        {settings.useStandersLogo ? (
-          <StandersLogo brandText={settings.brandName || 'STANDERS'} />
-        ) : (
-          <div className="text-center font-extrabold uppercase tracking-tight text-slate-800 text-[14px]">
-            {settings.brandName || 'STANDERS'}
-          </div>
-        )}
+        <img
+          src="./assets/standers_logo_clean.png"
+          alt="STANDERS"
+          className="max-h-[34mm] max-w-[38mm] object-contain select-none"
+        />
       </div>
 
-      {/* 2. MIDDLE SECTION: Nazwa, Wymiar, Kod na wadze (~100mm) */}
-      <div className="flex-1 flex flex-col justify-between px-[5mm] py-[2.2mm] overflow-hidden h-full">
+      {/* 2. MIDDLE SECTION: Nazwa, Wymiar, Pasek wagi (powiększony i pogrubiony) */}
+      <div className="flex-1 flex flex-col justify-between px-[4mm] py-[2mm] overflow-hidden h-full">
         {/* Row 1: Product Name ("Wkręt do drewna") */}
         <div className="w-full">
           {!isPrintMode ? (
@@ -73,20 +70,20 @@ export const FiszkaCard: React.FC<FiszkaCardProps> = ({
               value={item.name}
               onChange={(e) => handleTextChange('name', e.target.value)}
               placeholder="Wkręt do drewna"
-              className="w-full font-semibold text-slate-900 bg-transparent border-b border-transparent hover:border-slate-300 focus:border-emerald-600 focus:bg-emerald-50/40 focus:outline-none transition-colors px-1 py-0.5 rounded-xs"
+              className="w-full font-bold text-slate-900 bg-transparent border-b border-transparent hover:border-slate-300 focus:border-emerald-600 focus:bg-emerald-50/40 focus:outline-none transition-colors px-1 py-0.5 rounded-xs"
               style={{
-                fontSize: '4.6mm',
-                lineHeight: 1.2,
+                fontSize: '4.8mm',
+                lineHeight: 1.15,
                 fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
               }}
               title="Kliknij, aby zmienić nazwę towaru"
             />
           ) : (
             <div
-              className="font-semibold text-slate-900 truncate px-1"
+              className="font-bold text-slate-900 truncate px-1"
               style={{
-                fontSize: '4.6mm',
-                lineHeight: 1.2,
+                fontSize: '4.8mm',
+                lineHeight: 1.15,
                 fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
               }}
             >
@@ -103,20 +100,20 @@ export const FiszkaCard: React.FC<FiszkaCardProps> = ({
               value={item.dimension}
               onChange={(e) => handleTextChange('dimension', e.target.value)}
               placeholder="6x80 mm"
-              className="w-full font-bold text-slate-950 bg-transparent border-b border-transparent hover:border-slate-300 focus:border-emerald-600 focus:bg-emerald-50/40 focus:outline-none transition-colors px-1 py-0.5 rounded-xs"
+              className="w-full font-extrabold text-black bg-transparent border-b border-transparent hover:border-slate-300 focus:border-emerald-600 focus:bg-emerald-50/40 focus:outline-none transition-colors px-1 py-0.5 rounded-xs"
               style={{
-                fontSize: '4.8mm',
-                lineHeight: 1.2,
+                fontSize: '5.2mm',
+                lineHeight: 1.15,
                 fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
               }}
               title="Kliknij, aby zmienić wymiar"
             />
           ) : (
             <div
-              className="font-bold text-slate-950 truncate px-1"
+              className="font-extrabold text-black truncate px-1"
               style={{
-                fontSize: '4.8mm',
-                lineHeight: 1.2,
+                fontSize: '5.2mm',
+                lineHeight: 1.15,
                 fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
               }}
             >
@@ -125,19 +122,19 @@ export const FiszkaCard: React.FC<FiszkaCardProps> = ({
           )}
         </div>
 
-        {/* Row 3: Light Green Scale Code Pill Badge ("Wpisz na wadze: 247") */}
+        {/* Row 3: Zielony pasek - napis większy i pogrubiony, numer większy i pogrubiony */}
         <div
-          className="flex items-center justify-between rounded-lg px-[3mm] py-[1mm] border border-black/5"
+          className="flex items-center justify-between rounded-lg px-[3.5mm] py-[1mm]"
           style={{
             backgroundColor: settings.badgeColor || '#d7f5c5',
-            minHeight: '10.5mm',
-            maxHeight: '11.5mm',
+            minHeight: '12mm',
+            maxHeight: '12.5mm',
           }}
         >
           <div className="flex items-center select-none">
             <span
-              className="font-semibold text-slate-900"
-              style={{ fontSize: '3.6mm' }}
+              className="font-bold text-black tracking-tight"
+              style={{ fontSize: '4.2mm' }}
             >
               {settings.scaleLabelText || 'Wpisz na wadze:'}
             </span>
@@ -150,14 +147,14 @@ export const FiszkaCard: React.FC<FiszkaCardProps> = ({
                 value={item.scaleCode}
                 onChange={(e) => handleTextChange('scaleCode', e.target.value)}
                 placeholder="247"
-                className="w-[28mm] text-right font-black font-mono text-slate-950 bg-transparent border-b border-transparent hover:border-slate-400 focus:border-slate-900 focus:bg-white/40 focus:outline-none px-1 rounded-xs tracking-tight tabular-nums"
-                style={{ fontSize: '6.4mm', lineHeight: 1 }}
+                className="w-[32mm] text-right font-black font-mono text-black bg-transparent border-b border-transparent hover:border-slate-500 focus:border-black focus:bg-white/40 focus:outline-none px-1 rounded-xs tracking-tight tabular-nums"
+                style={{ fontSize: '7.8mm', lineHeight: 1 }}
                 title="Kliknij, aby zmienić numer na wadze"
               />
             ) : (
               <span
-                className="font-black font-mono text-slate-950 text-right tracking-tight tabular-nums px-1"
-                style={{ fontSize: '6.4mm', lineHeight: 1 }}
+                className="font-black font-mono text-black text-right tracking-tight tabular-nums px-1"
+                style={{ fontSize: '7.8mm', lineHeight: 1 }}
               >
                 {item.scaleCode || '247'}
               </span>
@@ -169,7 +166,7 @@ export const FiszkaCard: React.FC<FiszkaCardProps> = ({
       {/* 3. RIGHT SECTION: Czarna ramka 5.5 cm szerokości × 3.7 cm wysokości (55mm x 37mm) */}
       <div
         className="flex items-center justify-center shrink-0 pr-[1.5mm] pl-[1.5mm]"
-        style={{ width: '57mm', height: '40mm' }}
+        style={{ width: '58mm', height: '40mm' }}
       >
         <div
           className="box-border border border-black bg-white flex flex-col justify-between items-end p-[2.5mm] overflow-hidden"
@@ -182,7 +179,7 @@ export const FiszkaCard: React.FC<FiszkaCardProps> = ({
             maxHeight: '37mm',
           }}
         >
-          {/* Top of frame: Cena (edytowalne pole tekstowe) */}
+          {/* Top: Cena */}
           <div className="w-full flex justify-end text-right">
             {!isPrintMode ? (
               <input
@@ -190,25 +187,25 @@ export const FiszkaCard: React.FC<FiszkaCardProps> = ({
                 value={item.priceText ?? 'Cena'}
                 onChange={(e) => handleTextChange('priceText', e.target.value)}
                 placeholder="Cena"
-                className="w-full text-right text-slate-900 font-medium bg-transparent border-b border-transparent hover:border-slate-300 focus:border-emerald-600 focus:bg-emerald-50/30 focus:outline-none px-1 py-0.5 rounded-xs"
-                style={{ fontSize: '3.6mm', lineHeight: 1.1 }}
+                className="w-full text-right text-black font-semibold bg-transparent border-b border-transparent hover:border-slate-300 focus:border-emerald-600 focus:bg-emerald-50/30 focus:outline-none px-1 py-0.5 rounded-xs"
+                style={{ fontSize: '3.8mm', lineHeight: 1.1 }}
                 title="Kliknij, aby zmienić tekst Cena"
               />
             ) : (
               <span
-                className="font-medium text-slate-900 px-1"
-                style={{ fontSize: '3.6mm', lineHeight: 1.1 }}
+                className="font-semibold text-black px-1"
+                style={{ fontSize: '3.8mm', lineHeight: 1.1 }}
               >
                 {item.priceText || 'Cena'}
               </span>
             )}
           </div>
 
-          {/* Bottom of frame: Ref: [numer referencyjny] (edytowalne pole) */}
+          {/* Bottom: Ref: [numer] */}
           <div className="w-full flex items-center justify-end gap-1 text-right">
             <span
-              className="text-slate-800 font-medium select-none"
-              style={{ fontSize: '3.3mm' }}
+              className="text-black font-bold select-none"
+              style={{ fontSize: '3.6mm' }}
             >
               Ref:
             </span>
@@ -218,14 +215,14 @@ export const FiszkaCard: React.FC<FiszkaCardProps> = ({
                 value={item.refNumber ?? '42660256'}
                 onChange={(e) => handleTextChange('refNumber', e.target.value)}
                 placeholder="42660256"
-                className="w-[32mm] text-right text-slate-950 font-bold font-mono tracking-tight bg-transparent border-b border-transparent hover:border-slate-400 focus:border-emerald-600 focus:bg-emerald-50/40 focus:outline-none px-1 py-0.5 rounded-xs"
-                style={{ fontSize: '3.5mm' }}
+                className="w-[34mm] text-right text-black font-bold font-mono tracking-tight bg-transparent border-b border-transparent hover:border-slate-400 focus:border-emerald-600 focus:bg-emerald-50/40 focus:outline-none px-1 py-0.5 rounded-xs"
+                style={{ fontSize: '3.6mm' }}
                 title="Kliknij, aby zmienić numer referencji (Ref)"
               />
             ) : (
               <span
-                className="font-bold font-mono text-slate-950 tracking-tight px-1"
-                style={{ fontSize: '3.5mm' }}
+                className="font-bold font-mono text-black tracking-tight px-1"
+                style={{ fontSize: '3.6mm' }}
               >
                 {item.refNumber || '42660256'}
               </span>

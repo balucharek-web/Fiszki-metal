@@ -20,16 +20,17 @@ async function main() {
 
   const fontRegular = fs.readFileSync(path.join(publicDir, 'fonts', 'LiberationSans-Regular.ttf'));
   const fontBold = fs.readFileSync(path.join(publicDir, 'fonts', 'LiberationSans-Bold.ttf'));
+  const logoBytes = fs.readFileSync(path.join(publicDir, 'assets', 'standers_logo_clean.png'));
 
-  // 1. Generate 6-label A4 PDF
-  const pdfBytes6 = await generateFillablePdf(SAMPLE_ITEMS, 6, fontRegular, fontBold);
+  // 1. Generate 6-label A4 PDF with 1:1 Standers logo and exact layout
+  const pdfBytes6 = await generateFillablePdf(SAMPLE_ITEMS, 6, fontRegular, fontBold, logoBytes);
   fs.writeFileSync(path.join(publicDir, 'szablon_fiszek_6_a4.pdf'), pdfBytes6);
-  console.log('Successfully created public/szablon_fiszek_6_a4.pdf');
+  console.log('Successfully created public/szablon_fiszek_6_a4.pdf with 1:1 logo');
 
-  // 2. Generate 7-label A4 PDF
-  const pdfBytes7 = await generateFillablePdf(SAMPLE_ITEMS, 7, fontRegular, fontBold);
+  // 2. Generate 7-label A4 PDF with 1:1 Standers logo and exact layout
+  const pdfBytes7 = await generateFillablePdf(SAMPLE_ITEMS, 7, fontRegular, fontBold, logoBytes);
   fs.writeFileSync(path.join(publicDir, 'szablon_fiszek_7_a4.pdf'), pdfBytes7);
-  console.log('Successfully created public/szablon_fiszek_7_a4.pdf');
+  console.log('Successfully created public/szablon_fiszek_7_a4.pdf with 1:1 logo');
 }
 
 main().catch(console.error);
