@@ -15,30 +15,21 @@ export async function generateFillablePdf(
   pdfDoc.registerFontkit(fontkit);
 
   // Load custom TTF font with Polish characters support
-  let customFontRegular;
   let customFontBold;
 
-  if (fontRegularBytes && fontBoldBytes) {
-    customFontRegular = await pdfDoc.embedFont(fontRegularBytes);
+  if (fontBoldBytes) {
     customFontBold = await pdfDoc.embedFont(fontBoldBytes);
   } else if (typeof window !== 'undefined') {
     try {
-      const [resReg, resBold] = await Promise.all([
-        fetch('./fonts/LiberationSans-Regular.ttf'),
-        fetch('./fonts/LiberationSans-Bold.ttf'),
-      ]);
-      const [bufReg, bufBold] = await Promise.all([
-        resReg.arrayBuffer(),
-        resBold.arrayBuffer(),
-      ]);
-      customFontRegular = await pdfDoc.embedFont(new Uint8Array(bufReg));
+      const resBold = await fetch('./fonts/LiberationSans-Bold.ttf');
+      const bufBold = await resBold.arrayBuffer();
       customFontBold = await pdfDoc.embedFont(new Uint8Array(bufBold));
     } catch {
       // fallback
     }
   }
 
-  // Load Standers 1:1 Transparent Logo PNG (Pure white background, no scanner gray)
+  // Load Standers 1:1 Transparent Logo PNG
   let embeddedLogo;
   if (logoPngBytes) {
     try {
@@ -102,14 +93,14 @@ export async function generateFillablePdf(
       color: rgb(1, 1, 1),
     });
 
-    // 2. Left Section: 1:1 STANDERS Logo (BEZ linii pionowej za logo!)
+    // 2. Left Section: 1:1 STANDERS Logo (wymiary 36mm x 23mm, idealne proporcje 1.58:1)
     const logoAreaWidth = 42 * MM_TO_PT;
     if (embeddedLogo) {
       page.drawImage(embeddedLogo, {
         x: xLeft + 3 * MM_TO_PT,
-        y: yBottom + 3 * MM_TO_PT,
+        y: yBottom + 8.5 * MM_TO_PT,
         width: 36 * MM_TO_PT,
-        height: 34 * MM_TO_PT,
+        height: 23 * MM_TO_PT,
       });
     }
 
@@ -123,15 +114,15 @@ export async function generateFillablePdf(
     nameField.setAlignment(TextAlignment.Left);
     nameField.addToPage(page, {
       x: middleX,
-      y: yBottom + 25 * MM_TO_PT,
+      y: yBottom + 25.5 * MM_TO_PT,
       width: middleWidth,
       height: 11 * MM_TO_PT,
-      font: customFontBold,
       borderWidth: 0,
+      font: customFontBold,
     });
-    nameField.setFontSize(13.5);
+    nameField.setFontSize(14);
 
-    // Field 2: Wymiar (np. "6x80 mm") - większy i pogrubiony
+    // Field 2: Wymiar (np. "6x80 mm") - MOCNO POGRUBIONY I WIĘKSZY
     const dimField = form.createTextField(`fiszka_${i + 1}_wymiar`);
     dimField.setText(item.dimension || '6x80 mm');
     dimField.setAlignment(TextAlignment.Left);
@@ -139,50 +130,58 @@ export async function generateFillablePdf(
       x: middleX,
       y: yBottom + 14.5 * MM_TO_PT,
       width: middleWidth,
-      height: 10 * MM_TO_PT,
-      font: customFontBold,
+      height: 10.5 * MM_TO_PT,
       borderWidth: 0,
+      font: customFontBold,
     });
-    dimField.setFontSize(14.5);
+    dimField.setFontSize(16.5);
 
-    // Field 3: Zielony pasek z numerem wagi (#d7f5c5)
+    // Field 3: Zaokrąglony zielony pasek z numerem wagi (#d7f5c5)
     const badgeX = middleX;
     const badgeY = yBottom + 2 * MM_TO_PT;
     const badgeWidth = middleWidth;
     const badgeHeight = 12 * MM_TO_PT;
+    const badgeR = 2.5 * MM_TO_PT;
+    const greenColor = rgb(0.843, 0.961, 0.773);
 
-    page.drawRectangle({
-      x: badgeX,
-      y: badgeY,
-      width: badgeWidth,
-      height: badgeHeight,
-      color: rgb(0.84, 0.96, 0.77), // pastel green #d7f5c5
-    });
+    // Native geometric rounded rectangle
+    page.drawCircle({ x: badgeX + badgeR, y: badgeY + badgeR, size: badgeR, color: greenColor });
+    page.drawCircle({ x: badgeX + badgeWidth - badgeR, y: badgeY + badgeR, size: badgeR, color: greenColor });
+    page.drawCircle({ x: badgeX + badgeR, y: badgeY + badgeHeight - badgeR, size: badgeR, color: greenColor });
+    page.drawCircle({ x: badgeX + badgeWidth - badgeR, y: badgeY + badgeHeight - badgeR, size: badgeR, color: greenColor });
+    page.drawRectangle({ x: badgeX + badgeR, y: badgeY, width: badgeWidth - 2 * badgeR, height: badgeHeight, color: greenColor });
+    page.drawRectangle({ x: badgeX, y: badgeY + badgeR, width: badgeR, height: badgeHeight - 2 * badgeR, color: greenColor });
+    page.drawRectangle({ x: badgeX + badgeWidth - badgeR, y: badgeY + badgeR, width: badgeR, height: badgeHeight - 2 * badgeR, color: greenColor });
 
-    // "Wpisz na wadze:" - większy i pogrubiony
+    // "Wpisz na wadze:" - większy i mocno pogrubiony
     if (customFontBold) {
       page.drawText('Wpisz na wadze:', {
         x: badgeX + 3.5 * MM_TO_PT,
-        y: badgeY + 4 * MM_TO_PT,
-        size: 11.5,
+        y: badgeY + 3.8 * MM_TO_PT,
+        size: 13,
         font: customFontBold,
         color: rgb(0, 0, 0),
       });
     }
 
-    // Numer na wadze - duży, pogrubiony, wyrównany do prawej (np. 247)
+    // Numer na wadze - duży, mocno pogrubiony, wyrównany do prawej (np. 247)
     const scaleField = form.createTextField(`fiszka_${i + 1}_waga`);
     scaleField.setText(item.scaleCode || '247');
     scaleField.setAlignment(TextAlignment.Right);
     scaleField.addToPage(page, {
       x: badgeX + badgeWidth - 32 * MM_TO_PT,
-      y: badgeY + 0.8 * MM_TO_PT,
-      width: 29 * MM_TO_PT,
+      y: badgeY + 1 * MM_TO_PT,
+      width: 30 * MM_TO_PT,
       height: 10.5 * MM_TO_PT,
-      font: customFontBold,
       borderWidth: 0,
+      font: customFontBold,
     });
-    scaleField.setFontSize(22);
+    scaleField.setFontSize(25);
+
+    // Set widget background to matching green (eliminates any white cutout box!)
+    scaleField.acroField.getWidgets().forEach((w) => {
+      w.getOrCreateAppearanceCharacteristics().setBackgroundColor([0.843, 0.961, 0.773]);
+    });
 
     // 4. Right Section: Czarna ramka 5.5 cm szerokości × 3.7 cm wysokości (55mm x 37mm)
     const frameWidth = 55 * MM_TO_PT;
@@ -209,17 +208,17 @@ export async function generateFillablePdf(
       y: frameY + frameHeight - 11.5 * MM_TO_PT,
       width: frameWidth - 4 * MM_TO_PT,
       height: 9.5 * MM_TO_PT,
-      font: customFontBold,
       borderWidth: 0,
+      font: customFontBold,
     });
-    priceField.setFontSize(11);
+    priceField.setFontSize(11.5);
 
     // "Ref:" static label inside black frame (bottom)
     if (customFontBold) {
       page.drawText('Ref:', {
         x: frameX + 5 * MM_TO_PT,
         y: frameY + 3.8 * MM_TO_PT,
-        size: 10,
+        size: 10.5,
         font: customFontBold,
         color: rgb(0, 0, 0),
       });
@@ -234,10 +233,10 @@ export async function generateFillablePdf(
       y: frameY + 1.8 * MM_TO_PT,
       width: frameWidth - 17 * MM_TO_PT,
       height: 9 * MM_TO_PT,
-      font: customFontBold,
       borderWidth: 0,
+      font: customFontBold,
     });
-    refField.setFontSize(10.5);
+    refField.setFontSize(11);
   }
 
   // Calibration 50 mm ruler on left margin
@@ -252,18 +251,27 @@ export async function generateFillablePdf(
   });
   page.drawLine({
     start: { x: rulerX, y: rulerY },
-    end: { x: rulerX, y: rulerY + rulerHeight },
-    color: rgb(0.6, 0.6, 0.6),
-    thickness: 0.5,
-  });
-  page.drawLine({
-    start: { x: rulerX, y: rulerY + rulerHeight },
     end: { x: rulerX + 4 * MM_TO_PT, y: rulerY + rulerHeight },
     color: rgb(0.6, 0.6, 0.6),
     thickness: 0.5,
   });
+  page.drawLine({
+    start: { x: rulerX, y: rulerY },
+    end: { x: rulerX, y: rulerY + rulerHeight },
+    color: rgb(0.6, 0.6, 0.6),
+    thickness: 0.5,
+  });
 
-  return await pdfDoc.save({ updateFieldAppearances: false });
+  // Apply bold embedded font to all form field appearances
+  if (customFontBold) {
+    try {
+      form.updateFieldAppearances(customFontBold);
+    } catch {
+      // fallback
+    }
+  }
+
+  return await pdfDoc.save();
 }
 
 export function downloadBlob(data: Uint8Array, filename: string) {
