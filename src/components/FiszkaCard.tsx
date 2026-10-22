@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { FiszkaItem, SheetSettings } from '../types/label';
 
 interface FiszkaCardProps {
@@ -20,9 +20,29 @@ export const FiszkaCard: React.FC<FiszkaCardProps> = ({
   isPrintMode = false,
   index,
 }) => {
+  // Store previous value before field was emptied on focus
+  const [prevValues, setPrevValues] = useState<{ [key in keyof FiszkaItem]?: string }>({});
+
   const handleTextChange = (field: keyof FiszkaItem, value: string) => {
     if (onUpdate) {
       onUpdate({ [field]: value });
+    }
+  };
+
+  const handleFocus = (field: keyof FiszkaItem, currentValue: string) => {
+    // Save current value before clearing
+    setPrevValues((prev) => ({ ...prev, [field]: currentValue }));
+    // Automatically empty the field on click for fast editing
+    handleTextChange(field, '');
+  };
+
+  const handleBlur = (field: keyof FiszkaItem, currentValue: string) => {
+    // If the field is left empty without typing anything, restore the previous value
+    if (!currentValue.trim()) {
+      const original = prevValues[field];
+      if (original !== undefined && original !== '') {
+        handleTextChange(field, original);
+      }
     }
   };
 
@@ -60,7 +80,7 @@ export const FiszkaCard: React.FC<FiszkaCardProps> = ({
         />
       </div>
 
-      {/* 2. MIDDLE SECTION: Nazwa, Wymiar (mocno pogrubiony), Pasek wagi (pogrubiony napis i numer) */}
+      {/* 2. MIDDLE SECTION: Nazwa, Wymiar (wyraźnie pogrubiony), Pasek wagi (napis i numer ekstra pogrubiony) */}
       <div className="flex-1 flex flex-col justify-between px-[3.5mm] py-[2mm] overflow-hidden h-full">
         {/* Row 1: Product Name ("Wkręt do drewna") */}
         <div className="w-full">
@@ -69,6 +89,8 @@ export const FiszkaCard: React.FC<FiszkaCardProps> = ({
               type="text"
               value={item.name}
               onChange={(e) => handleTextChange('name', e.target.value)}
+              onFocus={() => handleFocus('name', item.name)}
+              onBlur={() => handleBlur('name', item.name)}
               placeholder="Wkręt do drewna"
               className="w-full font-bold text-black bg-transparent border-b border-transparent hover:border-slate-300 focus:border-emerald-600 focus:bg-emerald-50/40 focus:outline-none transition-colors px-1 py-0.5 rounded-xs"
               style={{
@@ -77,7 +99,7 @@ export const FiszkaCard: React.FC<FiszkaCardProps> = ({
                 fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
                 fontWeight: 700,
               }}
-              title="Kliknij, aby zmienić nazwę towaru"
+              title="Kliknij, aby zmienić nazwę towaru (czyści się automatycznie)"
             />
           ) : (
             <div
@@ -101,26 +123,28 @@ export const FiszkaCard: React.FC<FiszkaCardProps> = ({
               type="text"
               value={item.dimension}
               onChange={(e) => handleTextChange('dimension', e.target.value)}
+              onFocus={() => handleFocus('dimension', item.dimension)}
+              onBlur={() => handleBlur('dimension', item.dimension)}
               placeholder="6x80 mm"
               className="w-full text-black bg-transparent border-b border-transparent hover:border-slate-300 focus:border-emerald-600 focus:bg-emerald-50/40 focus:outline-none transition-colors px-1 py-0.5 rounded-xs tracking-tight"
               style={{
-                fontSize: '5.8mm',
+                fontSize: '5.9mm',
                 lineHeight: 1.1,
                 fontFamily: "'Plus Jakarta Sans', 'Inter', sans-serif",
                 fontWeight: 900,
-                WebkitTextStroke: '0.35px #000000',
+                WebkitTextStroke: '0.45px #000000',
               }}
-              title="Kliknij, aby zmienić wymiar"
+              title="Kliknij, aby zmienić wymiar (czyści się automatycznie)"
             />
           ) : (
             <div
               className="text-black truncate px-1 tracking-tight"
               style={{
-                fontSize: '5.8mm',
+                fontSize: '5.9mm',
                 lineHeight: 1.1,
                 fontFamily: "'Plus Jakarta Sans', 'Inter', sans-serif",
                 fontWeight: 900,
-                WebkitTextStroke: '0.35px #000000',
+                WebkitTextStroke: '0.45px #000000',
               }}
             >
               {item.dimension || '6x80 mm'}
@@ -128,7 +152,7 @@ export const FiszkaCard: React.FC<FiszkaCardProps> = ({
           )}
         </div>
 
-        {/* Row 3: Zielony pasek - cały napis WYRAŹNIE pogrubiony i numer WYRAŹNIE pogrubiony */}
+        {/* Row 3: Zielony pasek - cały napis WYRAŹNIE pogrubiony i numer EKSTRA pogrubiony */}
         <div
           className="flex items-center justify-between rounded-lg px-[3.5mm] py-[1mm]"
           style={{
@@ -144,7 +168,7 @@ export const FiszkaCard: React.FC<FiszkaCardProps> = ({
                 fontSize: '4.6mm',
                 fontFamily: "'Plus Jakarta Sans', 'Inter', sans-serif",
                 fontWeight: 900,
-                WebkitTextStroke: '0.25px #000000',
+                WebkitTextStroke: '0.3px #000000',
               }}
             >
               {settings.scaleLabelText || 'Wpisz na wadze:'}
@@ -157,26 +181,28 @@ export const FiszkaCard: React.FC<FiszkaCardProps> = ({
                 type="text"
                 value={item.scaleCode}
                 onChange={(e) => handleTextChange('scaleCode', e.target.value)}
+                onFocus={() => handleFocus('scaleCode', item.scaleCode)}
+                onBlur={() => handleBlur('scaleCode', item.scaleCode)}
                 placeholder="247"
-                className="w-[33mm] text-right font-mono text-black bg-transparent border-b border-transparent hover:border-slate-500 focus:border-black focus:bg-white/40 focus:outline-none px-1 rounded-xs tracking-tight tabular-nums"
+                className="w-[34mm] text-right font-mono text-black bg-transparent border-b border-transparent hover:border-slate-500 focus:border-black focus:bg-white/40 focus:outline-none px-1 rounded-xs tracking-tight tabular-nums"
                 style={{
-                  fontSize: '8.8mm',
+                  fontSize: '9.4mm',
                   lineHeight: 1,
                   fontFamily: "'JetBrains Mono', monospace",
                   fontWeight: 900,
-                  WebkitTextStroke: '0.45px #000000',
+                  WebkitTextStroke: '0.75px #000000',
                 }}
-                title="Kliknij, aby zmienić numer na wadze"
+                title="Kliknij, aby zmienić numer na wadze (czyści się automatycznie)"
               />
             ) : (
               <span
                 className="font-mono text-black text-right tracking-tight tabular-nums px-1"
                 style={{
-                  fontSize: '8.8mm',
+                  fontSize: '9.4mm',
                   lineHeight: 1,
                   fontFamily: "'JetBrains Mono', monospace",
                   fontWeight: 900,
-                  WebkitTextStroke: '0.45px #000000',
+                  WebkitTextStroke: '0.75px #000000',
                 }}
               >
                 {item.scaleCode || '247'}
@@ -209,10 +235,12 @@ export const FiszkaCard: React.FC<FiszkaCardProps> = ({
                 type="text"
                 value={item.priceText ?? 'Cena'}
                 onChange={(e) => handleTextChange('priceText', e.target.value)}
+                onFocus={() => handleFocus('priceText', item.priceText ?? 'Cena')}
+                onBlur={() => handleBlur('priceText', item.priceText ?? 'Cena')}
                 placeholder="Cena"
                 className="w-full text-right text-black font-bold bg-transparent border-b border-transparent hover:border-slate-300 focus:border-emerald-600 focus:bg-emerald-50/30 focus:outline-none px-1 py-0.5 rounded-xs"
                 style={{ fontSize: '3.8mm', lineHeight: 1.1, fontWeight: 700 }}
-                title="Kliknij, aby zmienić tekst Cena"
+                title="Kliknij, aby zmienić tekst Cena (czyści się automatycznie)"
               />
             ) : (
               <span
@@ -237,10 +265,12 @@ export const FiszkaCard: React.FC<FiszkaCardProps> = ({
                 type="text"
                 value={item.refNumber ?? '42660256'}
                 onChange={(e) => handleTextChange('refNumber', e.target.value)}
+                onFocus={() => handleFocus('refNumber', item.refNumber ?? '42660256')}
+                onBlur={() => handleBlur('refNumber', item.refNumber ?? '42660256')}
                 placeholder="42660256"
                 className="w-[34mm] text-right text-black font-black font-mono tracking-tight bg-transparent border-b border-transparent hover:border-slate-400 focus:border-emerald-600 focus:bg-emerald-50/40 focus:outline-none px-1 py-0.5 rounded-xs"
                 style={{ fontSize: '3.6mm', fontWeight: 900 }}
-                title="Kliknij, aby zmienić numer referencji (Ref)"
+                title="Kliknij, aby zmienić numer referencji (czyści się automatycznie)"
               />
             ) : (
               <span

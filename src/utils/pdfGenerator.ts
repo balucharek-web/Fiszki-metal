@@ -1,4 +1,4 @@
-import { PDFDocument, rgb, TextAlignment } from 'pdf-lib';
+import { PDFDocument, rgb, TextAlignment, PDFName, PDFString } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
 import { FiszkaItem } from '../types/label';
 
@@ -53,6 +53,27 @@ export async function generateFillablePdf(
 
   const page = pdfDoc.addPage([pageWidth, pageHeight]);
   const form = pdfDoc.getForm();
+
+  // Helper to attach auto-empty on focus and restore on empty blur to AcroForm field
+  const attachAutoClearAction = (field: any, fieldKey: string) => {
+    try {
+      const focusJs = pdfDoc.context.obj({
+        S: PDFName.of('JavaScript'),
+        JS: PDFString.of(`this._prev_${fieldKey} = event.target.value; event.target.value = "";`),
+      });
+      const blurJs = pdfDoc.context.obj({
+        S: PDFName.of('JavaScript'),
+        JS: PDFString.of(`if (event.target.value === "") { event.target.value = this._prev_${fieldKey} || ""; }`),
+      });
+      const aaDict = pdfDoc.context.obj({
+        Fo: focusJs,
+        Bl: blurJs,
+      });
+      field.acroField.dict.set(PDFName.of('AA'), aaDict);
+    } catch (e) {
+      console.warn('Could not attach AA JavaScript:', e);
+    }
+  };
 
   // Label dimensions in points
   const labelWidth = 195 * MM_TO_PT;
@@ -121,6 +142,7 @@ export async function generateFillablePdf(
       font: customFontBold,
     });
     nameField.setFontSize(14);
+    attachAutoClearAction(nameField, `nazwa_${i + 1}`);
 
     // Field 2: Wymiar (np. "6x80 mm") - WYRAŹNIE MOCNO POGRUBIONY I WIĘKSZY
     const dimField = form.createTextField(`fiszka_${i + 1}_wymiar`);
@@ -135,6 +157,7 @@ export async function generateFillablePdf(
       font: customFontBold,
     });
     dimField.setFontSize(18);
+    attachAutoClearAction(dimField, `wymiar_${i + 1}`);
 
     // Field 3: Zaokrąglony zielony pasek z numerem wagi (#d7f5c5)
     const badgeX = middleX;
@@ -164,24 +187,25 @@ export async function generateFillablePdf(
       });
     }
 
-    // Numer na wadze - duży, mocno pogrubiony, wyrównany do prawej (np. 247)
+    // Numer na wadze - EKSTRA POGRUBIONY (28pt), wyrównany do prawej (np. 247)
     const scaleField = form.createTextField(`fiszka_${i + 1}_waga`);
     scaleField.setText(item.scaleCode || '247');
     scaleField.setAlignment(TextAlignment.Right);
     scaleField.addToPage(page, {
       x: badgeX + badgeWidth - 34 * MM_TO_PT,
-      y: badgeY + 1 * MM_TO_PT,
+      y: badgeY + 0.8 * MM_TO_PT,
       width: 32 * MM_TO_PT,
-      height: 11 * MM_TO_PT,
+      height: 11.2 * MM_TO_PT,
       borderWidth: 0,
       font: customFontBold,
     });
-    scaleField.setFontSize(26);
+    scaleField.setFontSize(28);
 
     // Set widget background to matching green (eliminates any white cutout box!)
     scaleField.acroField.getWidgets().forEach((w) => {
       w.getOrCreateAppearanceCharacteristics().setBackgroundColor([0.843, 0.961, 0.773]);
     });
+    attachAutoClearAction(scaleField, `waga_${i + 1}`);
 
     // 4. Right Section: Czarna ramka 5.5 cm szerokości × 3.7 cm wysokości (55mm x 37mm)
     const frameWidth = 55 * MM_TO_PT;
@@ -212,6 +236,7 @@ export async function generateFillablePdf(
       font: customFontBold,
     });
     priceField.setFontSize(11.5);
+    attachAutoClearAction(priceField, `cena_${i + 1}`);
 
     // "Ref:" static label inside black frame (bottom)
     if (customFontBold) {
@@ -237,6 +262,7 @@ export async function generateFillablePdf(
       font: customFontBold,
     });
     refField.setFontSize(11);
+    attachAutoClearAction(refField, `ref_${i + 1}`);
   }
 
   // Calibration 50 mm ruler on left margin
@@ -256,8 +282,8 @@ export async function generateFillablePdf(
     thickness: 0.5,
   });
   page.drawLine({
-    start: { x: rulerX, y: rulerY },
-    end: { x: rulerX, y: rulerY + rulerHeight },
+    start: { x: rulerX, y: rulerY + rulerHeight },
+    end: { x: rulerX + 4 * MM_TO_PT, y: rulerY + rulerHeight },
     color: rgb(0.6, 0.6, 0.6),
     thickness: 0.5,
   });
