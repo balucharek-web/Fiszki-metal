@@ -54,7 +54,7 @@ export const FiszkaCard: React.FC<FiszkaCardProps> = ({
         style={{ width: '42mm' }}
       >
         <img
-          src="./assets/standers_logo_clean.png"
+          src="./assets/standers_logo_transparent.png"
           alt="STANDERS"
           className="max-h-[34mm] max-w-[38mm] object-contain select-none"
         />

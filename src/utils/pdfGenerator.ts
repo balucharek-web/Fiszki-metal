@@ -1,4 +1,4 @@
-import { PDFDocument, rgb } from 'pdf-lib';
+import { PDFDocument, rgb, TextAlignment } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
 import { FiszkaItem } from '../types/label';
 
@@ -6,7 +6,7 @@ const MM_TO_PT = 72 / 25.4; // 1 mm = ~2.83465 pt
 
 export async function generateFillablePdf(
   items: FiszkaItem[],
-  itemsCount: 6 | 7 = 6,
+  itemsCount: 7 = 7,
   fontRegularBytes?: Uint8Array,
   fontBoldBytes?: Uint8Array,
   logoPngBytes?: Uint8Array
@@ -38,7 +38,7 @@ export async function generateFillablePdf(
     }
   }
 
-  // Load Standers 1:1 Logo PNG
+  // Load Standers 1:1 Transparent Logo PNG (Pure white background, no scanner gray)
   let embeddedLogo;
   if (logoPngBytes) {
     try {
@@ -48,7 +48,7 @@ export async function generateFillablePdf(
     }
   } else if (typeof window !== 'undefined') {
     try {
-      const resLogo = await fetch('./assets/standers_logo_clean.png');
+      const resLogo = await fetch('./assets/standers_logo_transparent.png');
       const bufLogo = await resLogo.arrayBuffer();
       embeddedLogo = await pdfDoc.embedPng(new Uint8Array(bufLogo));
     } catch {
@@ -68,17 +68,24 @@ export async function generateFillablePdf(
   const labelHeight = 40 * MM_TO_PT;
   const leftMargin = ((210 - 195) / 2) * MM_TO_PT; // 7.5 mm
 
-  // Vertical layout
-  const verticalSpacingMm = itemsCount === 6 ? 4 : 0;
-  const totalContentHeightMm = itemsCount * 40 + (itemsCount - 1) * verticalSpacingMm;
-  const topMarginMm = Math.max(4, (297 - totalContentHeightMm) / 2);
+  // Vertical layout: Exactly 7 labels stacked seamlessly (280 mm total height)
+  const totalContentHeightMm = 7 * 40; // 280 mm
+  const topMarginMm = (297 - totalContentHeightMm) / 2; // 8.5 mm
 
-  const count = Math.min(itemsCount, items.length);
+  const count = 7;
 
   for (let i = 0; i < count; i++) {
-    const item = items[i];
+    const item = items[i] || {
+      id: `fiszka_${i + 1}`,
+      name: 'Wkręt do drewna',
+      dimension: '6x80 mm',
+      scaleCode: '247',
+      refNumber: '42660256',
+      priceText: 'Cena',
+    };
+
     // In PDF coordinates, (0,0) is bottom-left
-    const yTopMm = 297 - topMarginMm - i * (40 + verticalSpacingMm);
+    const yTopMm = 297 - topMarginMm - i * 40;
     const yBottomMm = yTopMm - 40;
 
     const xLeft = leftMargin;
@@ -90,16 +97,16 @@ export async function generateFillablePdf(
       y: yBottom,
       width: labelWidth,
       height: labelHeight,
-      borderColor: rgb(0.7, 0.7, 0.7),
+      borderColor: rgb(0.75, 0.75, 0.75),
       borderWidth: 0.75,
       color: rgb(1, 1, 1),
     });
 
-    // 2. Left Section: 1:1 STANDERS Logo (BRAK cienkiej linii pionowej za logo!)
-    const logoAreaWidth = 40 * MM_TO_PT;
+    // 2. Left Section: 1:1 STANDERS Logo (BEZ linii pionowej za logo!)
+    const logoAreaWidth = 42 * MM_TO_PT;
     if (embeddedLogo) {
       page.drawImage(embeddedLogo, {
-        x: xLeft + 2.5 * MM_TO_PT,
+        x: xLeft + 3 * MM_TO_PT,
         y: yBottom + 3 * MM_TO_PT,
         width: 36 * MM_TO_PT,
         height: 34 * MM_TO_PT,
@@ -108,11 +115,12 @@ export async function generateFillablePdf(
 
     // 3. Middle Section: Form Fields
     const middleX = xLeft + logoAreaWidth + 2 * MM_TO_PT;
-    const middleWidth = 92 * MM_TO_PT;
+    const middleWidth = 90 * MM_TO_PT;
 
     // Field 1: Nazwa towaru (np. "Wkręt do drewna")
     const nameField = form.createTextField(`fiszka_${i + 1}_nazwa`);
     nameField.setText(item.name || 'Wkręt do drewna');
+    nameField.setAlignment(TextAlignment.Left);
     nameField.addToPage(page, {
       x: middleX,
       y: yBottom + 25 * MM_TO_PT,
@@ -126,6 +134,7 @@ export async function generateFillablePdf(
     // Field 2: Wymiar (np. "6x80 mm") - większy i pogrubiony
     const dimField = form.createTextField(`fiszka_${i + 1}_wymiar`);
     dimField.setText(item.dimension || '6x80 mm');
+    dimField.setAlignment(TextAlignment.Left);
     dimField.addToPage(page, {
       x: middleX,
       y: yBottom + 14.5 * MM_TO_PT,
@@ -136,7 +145,7 @@ export async function generateFillablePdf(
     });
     dimField.setFontSize(14.5);
 
-    // Field 3: Zielony pasek - napis i numer powiększone i pogrubione
+    // Field 3: Zielony pasek z numerem wagi (#d7f5c5)
     const badgeX = middleX;
     const badgeY = yBottom + 2 * MM_TO_PT;
     const badgeWidth = middleWidth;
@@ -153,21 +162,22 @@ export async function generateFillablePdf(
     // "Wpisz na wadze:" - większy i pogrubiony
     if (customFontBold) {
       page.drawText('Wpisz na wadze:', {
-        x: badgeX + 3 * MM_TO_PT,
-        y: badgeY + 3.8 * MM_TO_PT,
+        x: badgeX + 3.5 * MM_TO_PT,
+        y: badgeY + 4 * MM_TO_PT,
         size: 11.5,
         font: customFontBold,
         color: rgb(0, 0, 0),
       });
     }
 
-    // Numer na wadze - duży i pogrubiony (np. 247)
+    // Numer na wadze - duży, pogrubiony, wyrównany do prawej (np. 247)
     const scaleField = form.createTextField(`fiszka_${i + 1}_waga`);
     scaleField.setText(item.scaleCode || '247');
+    scaleField.setAlignment(TextAlignment.Right);
     scaleField.addToPage(page, {
-      x: badgeX + badgeWidth - 30 * MM_TO_PT,
+      x: badgeX + badgeWidth - 32 * MM_TO_PT,
       y: badgeY + 0.8 * MM_TO_PT,
-      width: 28 * MM_TO_PT,
+      width: 29 * MM_TO_PT,
       height: 10.5 * MM_TO_PT,
       font: customFontBold,
       borderWidth: 0,
@@ -190,9 +200,10 @@ export async function generateFillablePdf(
       color: rgb(1, 1, 1),
     });
 
-    // Field 4: Cena inside black frame (top)
+    // Field 4: Cena inside black frame (top, right aligned)
     const priceField = form.createTextField(`fiszka_${i + 1}_cena`);
     priceField.setText(item.priceText || 'Cena');
+    priceField.setAlignment(TextAlignment.Right);
     priceField.addToPage(page, {
       x: frameX + 2 * MM_TO_PT,
       y: frameY + frameHeight - 11.5 * MM_TO_PT,
@@ -206,7 +217,7 @@ export async function generateFillablePdf(
     // "Ref:" static label inside black frame (bottom)
     if (customFontBold) {
       page.drawText('Ref:', {
-        x: frameX + 6 * MM_TO_PT,
+        x: frameX + 5 * MM_TO_PT,
         y: frameY + 3.8 * MM_TO_PT,
         size: 10,
         font: customFontBold,
@@ -214,13 +225,14 @@ export async function generateFillablePdf(
       });
     }
 
-    // Field 5: Ref Number inside black frame (bottom)
+    // Field 5: Ref Number inside black frame (bottom, right aligned)
     const refField = form.createTextField(`fiszka_${i + 1}_ref`);
     refField.setText(item.refNumber || '42660256');
+    refField.setAlignment(TextAlignment.Right);
     refField.addToPage(page, {
-      x: frameX + 16 * MM_TO_PT,
+      x: frameX + 14 * MM_TO_PT,
       y: frameY + 1.8 * MM_TO_PT,
-      width: frameWidth - 18 * MM_TO_PT,
+      width: frameWidth - 17 * MM_TO_PT,
       height: 9 * MM_TO_PT,
       font: customFontBold,
       borderWidth: 0,

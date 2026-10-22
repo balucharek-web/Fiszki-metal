@@ -82,66 +82,39 @@ const INITIAL_LABELS_7: FiszkaItem[] = [
 ];
 
 export default function App() {
-  const [itemsCount, setItemsCount] = useState<6 | 7>(6);
-
   const [items, setItems] = useState<FiszkaItem[]>(() => {
-    const saved = localStorage.getItem('standers_labels_simple_v2');
+    const saved = localStorage.getItem('standers_labels_simple_v3');
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+        if (Array.isArray(parsed) && parsed.length >= 7) return parsed.slice(0, 7);
       } catch {
         // fallback
       }
     }
-    return INITIAL_LABELS_6;
+    return INITIAL_LABELS_7;
   });
 
-  const [settings, setSettings] = useState<SheetSettings>({
-    itemsPerPage: 6,
+  const [settings] = useState<SheetSettings>({
+    itemsPerPage: 7,
     showCuttingGuides: true,
-    cuttingGuideStyle: 'dashed',
-    showScissorsIcon: true,
+    cuttingGuideStyle: 'solid',
+    showScissorsIcon: false,
     showRightSection: true,
     brandName: 'STANDERS',
     useStandersLogo: true,
     scaleLabelText: 'Wpisz na wadze:',
     badgeColor: '#d7f5c5',
     includeCalibrationRuler: true,
-    verticalSpacingMm: 4,
+    verticalSpacingMm: 0,
   });
 
   const [zoomScale, setZoomScale] = useState(0.85);
 
   // Sync to local storage
   useEffect(() => {
-    localStorage.setItem('standers_labels_simple_v2', JSON.stringify(items));
+    localStorage.setItem('standers_labels_simple_v3', JSON.stringify(items));
   }, [items]);
-
-  // Handle switching between 6 and 7 labels
-  const handleSetLayout = (count: 6 | 7) => {
-    setItemsCount(count);
-    setSettings((prev) => ({
-      ...prev,
-      itemsPerPage: count,
-      verticalSpacingMm: count === 6 ? 4 : 0,
-    }));
-
-    if (count === 7 && items.length < 7) {
-      const extraItem: FiszkaItem = {
-        id: `fiszka_7_${Date.now()}`,
-        name: items[0]?.name || 'Wkręt do drewna',
-        dimension: '3.5x25 mm',
-        scaleCode: '241',
-        refNumber: '42660250',
-        priceText: 'Cena',
-      };
-      setItems([...items, extraItem]);
-    } else if (count === 6 && items.length > 6) {
-      setItems(items.slice(0, 6));
-    }
-  };
-
   const handleUpdateItem = (id: string, updated: Partial<FiszkaItem>) => {
     setItems((prev) =>
       prev.map((it) => (it.id === id ? { ...it, ...updated } : it))
@@ -165,8 +138,7 @@ export default function App() {
   // Reset to initial clean template
   const handleReset = () => {
     if (window.confirm('Czy chcesz zresetować fiszki do wzorca początkowego?')) {
-      const defaults = itemsCount === 6 ? INITIAL_LABELS_6 : INITIAL_LABELS_7;
-      setItems(defaults);
+      setItems(INITIAL_LABELS_7);
     }
   };
 
@@ -175,13 +147,13 @@ export default function App() {
   const handleDownloadPdf = async () => {
     try {
       setIsGeneratingPdf(true);
-      const pdfBytes = await generateFillablePdf(items, itemsCount);
-      downloadBlob(pdfBytes, `szablon_fiszek_${itemsCount}_a4.pdf`);
+      const pdfBytes = await generateFillablePdf(items, 7);
+      downloadBlob(pdfBytes, 'szablon_fiszek_7_a4.pdf');
     } catch (err) {
       console.error('PDF generation error, downloading fallback:', err);
       const link = document.createElement('a');
-      link.href = `./szablon_fiszek_${itemsCount}_a4.pdf`;
-      link.download = `szablon_fiszek_${itemsCount}_a4.pdf`;
+      link.href = './szablon_fiszek_7_a4.pdf';
+      link.download = 'szablon_fiszek_7_a4.pdf';
       link.click();
     } finally {
       setIsGeneratingPdf(false);
@@ -192,46 +164,21 @@ export default function App() {
     window.print();
   };
 
-  const displayedItems = items.slice(0, itemsCount);
+  const displayedItems = items.slice(0, 7);
 
   return (
     <div className="min-h-screen bg-slate-200/90 flex flex-col items-center select-text font-sans">
       {/* Sleek Floating Control Bar (Hidden during printing) */}
       <div className="no-print sticky top-3 z-30 my-2 px-4 py-2.5 bg-white/95 backdrop-blur-md rounded-2xl shadow-lg border border-slate-300 flex flex-wrap items-center justify-between gap-4 max-w-4xl w-[94%]">
-        {/* Left: Dimension info & Layout switch */}
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-1.5 text-xs font-bold text-slate-800">
-            <span>Fiszka:</span>
-            <span className="font-mono bg-slate-100 px-2 py-0.5 rounded text-emerald-800 border border-slate-200">
-              19.5 × 4 cm
-            </span>
-          </div>
-
-          <div className="h-4 w-[1px] bg-slate-300 mx-1"></div>
-
-          {/* 6 vs 7 switch */}
-          <div className="flex items-center bg-slate-100 p-0.5 rounded-lg border border-slate-200 text-xs">
-            <button
-              onClick={() => handleSetLayout(6)}
-              className={`px-3 py-1 font-semibold rounded-md transition-colors cursor-pointer ${
-                itemsCount === 6
-                  ? 'bg-white text-slate-900 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              6 na stronę A4
-            </button>
-            <button
-              onClick={() => handleSetLayout(7)}
-              className={`px-3 py-1 font-semibold rounded-md transition-colors cursor-pointer ${
-                itemsCount === 7
-                  ? 'bg-white text-slate-900 shadow-xs'
-                  : 'text-slate-600 hover:text-slate-900'
-              }`}
-            >
-              7 na stronę A4
-            </button>
-          </div>
+        {/* Left: Dimension info & 7 labels indicator */}
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-bold text-slate-900">Format A4:</span>
+          <span className="font-mono text-xs bg-slate-100 px-2.5 py-0.5 rounded-md text-emerald-800 font-bold border border-slate-200">
+            7 fiszek × 19.5 × 4.0 cm
+          </span>
+          <span className="text-xs text-slate-500 hidden sm:inline">
+            (ramka 5,5 × 3,7 cm)
+          </span>
         </div>
 
         {/* Center: Quick helpers */}
