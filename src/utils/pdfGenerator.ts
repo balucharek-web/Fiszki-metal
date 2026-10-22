@@ -161,10 +161,10 @@ export async function generateFillablePdf(
     dimField.acroField.setDefaultAppearance('/Helvetica-Bold 18 Tf 0 0 0 rg');
     attachAutoClearAction(dimField, `wymiar_${i + 1}`);
 
-    // Field 3: Zaokrąglony zielony pasek z numerem wagi (#d7f5c5)
+    // Field 3: Zaokrąglony zielony pasek DOKŁADNIE 7,5 cm (75mm) z numerem wagi (#d7f5c5)
     const badgeX = middleX;
     const badgeY = yBottom + 1.8 * MM_TO_PT;
-    const badgeWidth = middleWidth;
+    const badgeWidth = 75 * MM_TO_PT; // dokładnie 7.5 cm
     const badgeHeight = 12.2 * MM_TO_PT;
     const badgeR = 2.5 * MM_TO_PT;
     const greenColor = rgb(0.843, 0.961, 0.773);
@@ -181,9 +181,9 @@ export async function generateFillablePdf(
     // "Wpisz na wadze:" - większy i mocno pogrubiony
     if (customFontBold) {
       page.drawText('Wpisz na wadze:', {
-        x: badgeX + 3.5 * MM_TO_PT,
+        x: badgeX + 3.2 * MM_TO_PT,
         y: badgeY + 4 * MM_TO_PT,
-        size: 13.5,
+        size: 13,
         font: customFontBold,
         color: rgb(0, 0, 0),
       });
@@ -194,9 +194,9 @@ export async function generateFillablePdf(
     scaleField.setText(item.scaleCode ?? '');
     scaleField.setAlignment(TextAlignment.Right);
     scaleField.addToPage(page, {
-      x: badgeX + badgeWidth - 34 * MM_TO_PT,
+      x: badgeX + badgeWidth - 28 * MM_TO_PT,
       y: badgeY + 0.8 * MM_TO_PT,
-      width: 32 * MM_TO_PT,
+      width: 26 * MM_TO_PT,
       height: 11.2 * MM_TO_PT,
       borderWidth: 0,
       font: customFontBold,
@@ -210,10 +210,10 @@ export async function generateFillablePdf(
     });
     attachAutoClearAction(scaleField, `waga_${i + 1}`);
 
-    // 4. Right Section: Czarna ramka 5.5 cm szerokości × 3.7 cm wysokości (55mm x 37mm)
+    // 4. Right Section: Czarna ramka 5.5 cm szerokości × 3.7 cm wysokości (55mm x 37mm) z marginesem 5mm od końca
     const frameWidth = 55 * MM_TO_PT;
     const frameHeight = 37 * MM_TO_PT;
-    const frameX = xLeft + labelWidth - frameWidth - 1.5 * MM_TO_PT;
+    const frameX = xLeft + labelWidth - frameWidth - 5 * MM_TO_PT; // margines od końca 5mm
     const frameY = yBottom + 1.5 * MM_TO_PT;
 
     page.drawRectangle({

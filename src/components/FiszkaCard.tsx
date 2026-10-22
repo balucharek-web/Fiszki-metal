@@ -152,20 +152,23 @@ export const FiszkaCard: React.FC<FiszkaCardProps> = ({
           )}
         </div>
 
-        {/* Row 3: Zielony pasek - cały napis WYRAŹNIE pogrubiony i numer EKSTRA pogrubiony */}
+        {/* Row 3: Zielony pasek DOKŁADNIE 7,5 cm (75mm) */}
         <div
-          className="flex items-center justify-between rounded-lg px-[3.5mm] py-[1mm]"
+          className="flex items-center justify-between rounded-lg px-[3mm] py-[1mm]"
           style={{
+            width: '75mm',
+            minWidth: '75mm',
+            maxWidth: '75mm',
             backgroundColor: settings.badgeColor || '#d7f5c5',
             minHeight: '12.2mm',
             maxHeight: '12.8mm',
           }}
         >
-          <div className="flex items-center select-none">
+          <div className="flex items-center select-none shrink-0">
             <span
               className="text-black tracking-tight"
               style={{
-                fontSize: '4.6mm',
+                fontSize: '4.4mm',
                 fontFamily: "'Plus Jakarta Sans', 'Inter', sans-serif",
                 fontWeight: 900,
                 WebkitTextStroke: '0.3px #000000',
@@ -175,7 +178,7 @@ export const FiszkaCard: React.FC<FiszkaCardProps> = ({
             </span>
           </div>
 
-          <div className="flex items-center justify-end">
+          <div className="flex items-center justify-end flex-1 pl-1">
             {!isPrintMode ? (
               <input
                 type="text"
@@ -184,9 +187,9 @@ export const FiszkaCard: React.FC<FiszkaCardProps> = ({
                 onFocus={() => handleFocus('scaleCode', item.scaleCode)}
                 onBlur={() => handleBlur('scaleCode', item.scaleCode)}
                 placeholder="247"
-                className="w-[34mm] text-right font-mono text-black bg-transparent border-b border-transparent hover:border-slate-500 focus:border-black focus:bg-white/40 focus:outline-none px-1 rounded-xs tracking-tight tabular-nums"
+                className="w-full text-right font-mono text-black bg-transparent border-b border-transparent hover:border-slate-500 focus:border-black focus:bg-white/40 focus:outline-none px-1 rounded-xs tracking-tight tabular-nums"
                 style={{
-                  fontSize: '9.4mm',
+                  fontSize: '9.2mm',
                   lineHeight: 1,
                   fontFamily: "'JetBrains Mono', monospace",
                   fontWeight: 900,
@@ -198,7 +201,7 @@ export const FiszkaCard: React.FC<FiszkaCardProps> = ({
               <span
                 className="font-mono text-black text-right tracking-tight tabular-nums px-1"
                 style={{
-                  fontSize: '9.4mm',
+                  fontSize: '9.2mm',
                   lineHeight: 1,
                   fontFamily: "'JetBrains Mono', monospace",
                   fontWeight: 900,
@@ -212,10 +215,10 @@ export const FiszkaCard: React.FC<FiszkaCardProps> = ({
         </div>
       </div>
 
-      {/* 3. RIGHT SECTION: Czarna ramka 5.5 cm szerokości × 3.7 cm wysokości (55mm x 37mm) */}
+      {/* 3. RIGHT SECTION: Czarna ramka 5.5 cm szerokości × 3.7 cm wysokości z marginesem 5mm od końca */}
       <div
-        className="flex items-center justify-center shrink-0 pr-[1.5mm] pl-[1.5mm]"
-        style={{ width: '58mm', height: '40mm' }}
+        className="flex items-center justify-end shrink-0 pr-[5mm]"
+        style={{ width: '60mm', height: '40mm' }}
       >
         <div
           className="box-border border border-black bg-white flex flex-col justify-between items-end p-[2.5mm] overflow-hidden"
