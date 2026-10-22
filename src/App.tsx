@@ -144,16 +144,26 @@ export default function App() {
 
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
-  const handleDownloadPdf = async () => {
+  const handleDownloadPdf = async (empty = false) => {
     try {
       setIsGeneratingPdf(true);
-      const pdfBytes = await generateFillablePdf(items, 7);
-      downloadBlob(pdfBytes, 'szablon_fiszek_7_a4.pdf');
+      const itemsToExport = empty
+        ? Array.from({ length: 7 }, (_, i) => ({
+            id: `empty_${i + 1}`,
+            name: '',
+            dimension: '',
+            scaleCode: '',
+            refNumber: '',
+            priceText: 'Cena',
+          }))
+        : items;
+      const pdfBytes = await generateFillablePdf(itemsToExport, 7);
+      downloadBlob(pdfBytes, empty ? 'szablon_fiszek_7_pusty_a4.pdf' : 'szablon_fiszek_7_a4.pdf');
     } catch (err) {
       console.error('PDF generation error, downloading fallback:', err);
       const link = document.createElement('a');
-      link.href = './szablon_fiszek_7_a4.pdf';
-      link.download = 'szablon_fiszek_7_a4.pdf';
+      link.href = empty ? './szablon_fiszek_7_pusty_a4.pdf' : './szablon_fiszek_7_a4.pdf';
+      link.download = empty ? 'szablon_fiszek_7_pusty_a4.pdf' : 'szablon_fiszek_7_a4.pdf';
       link.click();
     } finally {
       setIsGeneratingPdf(false);
@@ -249,34 +259,46 @@ export default function App() {
             </button>
           </div>
 
-          {/* Download Fillable PDF Button */}
-          <button
-            onClick={handleDownloadPdf}
-            disabled={isGeneratingPdf}
-            className="px-3 py-1.5 text-xs font-semibold text-slate-800 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer"
-            title="Pobierz plik PDF z aktywnymi polami do wypełniania w Adobe Reader lub przeglądarce"
-          >
-            <FileDown className="w-3.5 h-3.5 text-slate-600" />
-            <span className="hidden sm:inline">
-              {isGeneratingPdf ? 'Generowanie...' : 'Pobierz edytowalny PDF'}
-            </span>
-            <span className="sm:hidden">PDF</span>
-          </button>
+          {/* Download Fillable PDF Buttons */}
+          <div className="flex items-center gap-1.5">
+            <button
+              onClick={() => handleDownloadPdf(false)}
+              disabled={isGeneratingPdf}
+              className="px-3 py-1.5 text-xs font-semibold text-slate-800 bg-slate-100 hover:bg-slate-200 border border-slate-300 rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer"
+              title="Pobierz plik PDF z aktualnie wpisanymi wartościami"
+            >
+              <FileDown className="w-3.5 h-3.5 text-slate-600" />
+              <span className="hidden sm:inline">
+                {isGeneratingPdf ? 'Generowanie...' : 'Pobierz PDF (z danymi)'}
+              </span>
+              <span className="sm:hidden">PDF</span>
+            </button>
+
+            <button
+              onClick={() => handleDownloadPdf(true)}
+              disabled={isGeneratingPdf}
+              className="px-2.5 py-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 bg-white hover:bg-slate-50 border border-slate-200 rounded-lg flex items-center gap-1 transition-colors cursor-pointer"
+              title="Pobierz czysty plik PDF z pustymi polami (klikasz i od razu piszesz bez kasowania tekstu)"
+            >
+              <span>Czysty szablon</span>
+            </button>
+          </div>
 
           {/* Primary Print Button */}
           <button
             onClick={handlePrint}
             className="px-4 py-1.5 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 rounded-lg flex items-center gap-2 shadow-xs transition-colors cursor-pointer"
+            title="Drukuj lub zapisz jako idealny plik PDF w oknie drukowania"
           >
             <Printer className="w-4 h-4" />
-            <span>Drukuj A4</span>
+            <span>Drukuj / Zapisz A4</span>
           </button>
         </div>
       </div>
 
       {/* Helper notice */}
-      <div className="no-print text-center text-xs text-slate-500 mb-2 select-none">
-        Kliknij w dowolny tekst, wymiar, kod na wadze lub numer referencyjny (Ref) w ramce 5,5 × 3,7 cm, aby go zmienić.
+      <div className="no-print text-center text-xs text-slate-600 max-w-2xl px-4 mb-2 select-none">
+        💡 <strong>Wskazówka:</strong> Kliknij w dowolne pole na arkuszu — wyczyści się automatycznie do wpisania nowego tekstu. Aby zapisać 100% idealny plik PDF identyczny z podglądem: kliknij <strong>„Drukuj / Zapisz A4”</strong> i w oknie wydruku wybierz <em>„Zapisz jako PDF”</em>.
       </div>
 
       {/* Main A4 Sheet Canvas (Direct On-Page Editing) */}

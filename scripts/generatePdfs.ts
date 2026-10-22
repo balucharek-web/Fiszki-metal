@@ -12,6 +12,15 @@ const SAMPLE_ITEMS = [
   { id: '7', name: 'Wkręt do drewna', dimension: '3.5x25 mm', scaleCode: '241', refNumber: '42660250', priceText: 'Cena' },
 ];
 
+const EMPTY_ITEMS = Array.from({ length: 7 }, (_, i) => ({
+  id: `empty_${i + 1}`,
+  name: '',
+  dimension: '',
+  scaleCode: '',
+  refNumber: '',
+  priceText: 'Cena',
+}));
+
 async function main() {
   const publicDir = path.resolve('public');
   if (!fs.existsSync(publicDir)) {
@@ -22,10 +31,15 @@ async function main() {
   const fontBold = fs.readFileSync(path.join(publicDir, 'fonts', 'LiberationSans-Bold.ttf'));
   const logoBytes = fs.readFileSync(path.join(publicDir, 'assets', 'standers_logo_transparent.png'));
 
-  // Generate 7-label A4 PDF with transparent logo, rounded green badge, right alignment
-  const pdfBytes7 = await generateFillablePdf(SAMPLE_ITEMS, 7, fontRegular, fontBold, logoBytes);
-  fs.writeFileSync(path.join(publicDir, 'szablon_fiszek_7_a4.pdf'), pdfBytes7);
-  console.log('Successfully created public/szablon_fiszek_7_a4.pdf (7 fiszek 1:1)');
+  // 1. Generate 7-label PDF with sample values
+  const pdfBytesSample = await generateFillablePdf(SAMPLE_ITEMS, 7, fontRegular, fontBold, logoBytes);
+  fs.writeFileSync(path.join(publicDir, 'szablon_fiszek_7_a4.pdf'), pdfBytesSample);
+  console.log('Successfully created public/szablon_fiszek_7_a4.pdf');
+
+  // 2. Generate 7-label PDF with blank empty fields
+  const pdfBytesEmpty = await generateFillablePdf(EMPTY_ITEMS, 7, fontRegular, fontBold, logoBytes);
+  fs.writeFileSync(path.join(publicDir, 'szablon_fiszek_7_pusty_a4.pdf'), pdfBytesEmpty);
+  console.log('Successfully created public/szablon_fiszek_7_pusty_a4.pdf (puste pola do szybkiego wpisywania)');
 }
 
 main().catch(console.error);

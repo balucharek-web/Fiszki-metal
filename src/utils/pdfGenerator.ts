@@ -131,7 +131,7 @@ export async function generateFillablePdf(
 
     // Field 1: Nazwa towaru (np. "Wkręt do drewna")
     const nameField = form.createTextField(`fiszka_${i + 1}_nazwa`);
-    nameField.setText(item.name || 'Wkręt do drewna');
+    nameField.setText(item.name ?? '');
     nameField.setAlignment(TextAlignment.Left);
     nameField.addToPage(page, {
       x: middleX,
@@ -142,11 +142,12 @@ export async function generateFillablePdf(
       font: customFontBold,
     });
     nameField.setFontSize(14);
+    nameField.acroField.setDefaultAppearance('/Helvetica-Bold 14 Tf 0 0 0 rg');
     attachAutoClearAction(nameField, `nazwa_${i + 1}`);
 
     // Field 2: Wymiar (np. "6x80 mm") - WYRAŹNIE MOCNO POGRUBIONY I WIĘKSZY
     const dimField = form.createTextField(`fiszka_${i + 1}_wymiar`);
-    dimField.setText(item.dimension || '6x80 mm');
+    dimField.setText(item.dimension ?? '');
     dimField.setAlignment(TextAlignment.Left);
     dimField.addToPage(page, {
       x: middleX,
@@ -157,6 +158,7 @@ export async function generateFillablePdf(
       font: customFontBold,
     });
     dimField.setFontSize(18);
+    dimField.acroField.setDefaultAppearance('/Helvetica-Bold 18 Tf 0 0 0 rg');
     attachAutoClearAction(dimField, `wymiar_${i + 1}`);
 
     // Field 3: Zaokrąglony zielony pasek z numerem wagi (#d7f5c5)
@@ -189,7 +191,7 @@ export async function generateFillablePdf(
 
     // Numer na wadze - EKSTRA POGRUBIONY (28pt), wyrównany do prawej (np. 247)
     const scaleField = form.createTextField(`fiszka_${i + 1}_waga`);
-    scaleField.setText(item.scaleCode || '247');
+    scaleField.setText(item.scaleCode ?? '');
     scaleField.setAlignment(TextAlignment.Right);
     scaleField.addToPage(page, {
       x: badgeX + badgeWidth - 34 * MM_TO_PT,
@@ -200,6 +202,7 @@ export async function generateFillablePdf(
       font: customFontBold,
     });
     scaleField.setFontSize(28);
+    scaleField.acroField.setDefaultAppearance('/Helvetica-Bold 28 Tf 0 0 0 rg');
 
     // Set widget background to matching green (eliminates any white cutout box!)
     scaleField.acroField.getWidgets().forEach((w) => {
@@ -225,7 +228,7 @@ export async function generateFillablePdf(
 
     // Field 4: Cena inside black frame (top, right aligned)
     const priceField = form.createTextField(`fiszka_${i + 1}_cena`);
-    priceField.setText(item.priceText || 'Cena');
+    priceField.setText(item.priceText ?? '');
     priceField.setAlignment(TextAlignment.Right);
     priceField.addToPage(page, {
       x: frameX + 2 * MM_TO_PT,
@@ -236,6 +239,7 @@ export async function generateFillablePdf(
       font: customFontBold,
     });
     priceField.setFontSize(11.5);
+    priceField.acroField.setDefaultAppearance('/Helvetica-Bold 11.5 Tf 0 0 0 rg');
     attachAutoClearAction(priceField, `cena_${i + 1}`);
 
     // "Ref:" static label inside black frame (bottom)
@@ -251,7 +255,7 @@ export async function generateFillablePdf(
 
     // Field 5: Ref Number inside black frame (bottom, right aligned)
     const refField = form.createTextField(`fiszka_${i + 1}_ref`);
-    refField.setText(item.refNumber || '42660256');
+    refField.setText(item.refNumber ?? '');
     refField.setAlignment(TextAlignment.Right);
     refField.addToPage(page, {
       x: frameX + 14 * MM_TO_PT,
@@ -262,6 +266,7 @@ export async function generateFillablePdf(
       font: customFontBold,
     });
     refField.setFontSize(11);
+    refField.acroField.setDefaultAppearance('/Helvetica-Bold 11 Tf 0 0 0 rg');
     attachAutoClearAction(refField, `ref_${i + 1}`);
   }
 
