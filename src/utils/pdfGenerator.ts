@@ -1,8 +1,42 @@
-import { PDFDocument, rgb, TextAlignment, PDFName, PDFString } from 'pdf-lib';
+import { PDFDocument, rgb, TextAlignment, PDFName, PDFString, PDFFont, PDFPage } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
 import { FiszkaItem } from '../types/label';
 
 const MM_TO_PT = 72 / 25.4; // 1 mm = ~2.83465 pt
+
+// Multi-directional offset text renderer to simulate CSS -webkit-text-stroke in PDF vectors
+function drawUltraBoldText(
+  page: PDFPage,
+  text: string,
+  x: number,
+  y: number,
+  size: number,
+  font: PDFFont,
+  offset = 0.45,
+  color = rgb(0, 0, 0)
+) {
+  if (!text) return;
+  const offsets = [
+    [-offset, 0],
+    [offset, 0],
+    [0, -offset],
+    [0, offset],
+    [-offset, -offset],
+    [offset, -offset],
+    [-offset, offset],
+    [offset, offset],
+    [0, 0],
+  ];
+  for (const [dx, dy] of offsets) {
+    page.drawText(text, {
+      x: x + dx,
+      y: y + dy,
+      size,
+      font,
+      color,
+    });
+  }
+}
 
 export async function generateFillablePdf(
   items: FiszkaItem[],
@@ -15,7 +49,7 @@ export async function generateFillablePdf(
   pdfDoc.registerFontkit(fontkit);
 
   // Load custom TTF font with Polish characters support
-  let customFontBold;
+  let customFontBold: PDFFont | undefined;
 
   if (fontBoldBytes) {
     customFontBold = await pdfDoc.embedFont(fontBoldBytes);
@@ -125,11 +159,14 @@ export async function generateFillablePdf(
       });
     }
 
-    // 3. Middle Section: Form Fields
+    // 3. Middle Section:
     const middleX = xLeft + logoAreaWidth + 2 * MM_TO_PT;
-    const middleWidth = 90 * MM_TO_PT;
+    const middleWidth = 84 * MM_TO_PT;
 
-    // Field 1: Nazwa towaru (np. "Wkręt do drewna")
+    // Row 1: Nazwa towaru (np. "Wkręt do drewna")
+    if (customFontBold && item.name) {
+      drawUltraBoldText(page, item.name, middleX + 0.5 * MM_TO_PT, yBottom + 27 * MM_TO_PT, 14, customFontBold, 0.3);
+    }
     const nameField = form.createTextField(`fiszka_${i + 1}_nazwa`);
     nameField.setText(item.name ?? '');
     nameField.setAlignment(TextAlignment.Left);
@@ -142,10 +179,12 @@ export async function generateFillablePdf(
       font: customFontBold,
     });
     nameField.setFontSize(14);
-    nameField.acroField.setDefaultAppearance('/Helvetica-Bold 14 Tf 0 0 0 rg');
     attachAutoClearAction(nameField, `nazwa_${i + 1}`);
 
-    // Field 2: Wymiar (np. "6x80 mm") - WYRAŹNIE MOCNO POGRUBIONY I WIĘKSZY
+    // Row 2: Wymiar (np. "6x80 mm") - EKSTRA POGRUBIONY (Ultra-bold vector)
+    if (customFontBold && item.dimension) {
+      drawUltraBoldText(page, item.dimension, middleX + 0.5 * MM_TO_PT, yBottom + 15 * MM_TO_PT, 18, customFontBold, 0.45);
+    }
     const dimField = form.createTextField(`fiszka_${i + 1}_wymiar`);
     dimField.setText(item.dimension ?? '');
     dimField.setAlignment(TextAlignment.Left);
@@ -161,7 +200,7 @@ export async function generateFillablePdf(
     dimField.acroField.setDefaultAppearance('/Helvetica-Bold 18 Tf 0 0 0 rg');
     attachAutoClearAction(dimField, `wymiar_${i + 1}`);
 
-    // Field 3: Zaokrąglony zielony pasek DOKŁADNIE 7,5 cm (75mm) z numerem wagi (#d7f5c5)
+    // Row 3: Zaokrąglony zielony pasek DOKŁADNIE 7,5 cm (75mm) z numerem wagi (#d7f5c5)
     const badgeX = middleX;
     const badgeY = yBottom + 1.8 * MM_TO_PT;
     const badgeWidth = 75 * MM_TO_PT; // dokładnie 7.5 cm
@@ -178,33 +217,41 @@ export async function generateFillablePdf(
     page.drawRectangle({ x: badgeX, y: badgeY + badgeR, width: badgeR, height: badgeHeight - 2 * badgeR, color: greenColor });
     page.drawRectangle({ x: badgeX + badgeWidth - badgeR, y: badgeY + badgeR, width: badgeR, height: badgeHeight - 2 * badgeR, color: greenColor });
 
-    // "Wpisz na wadze:" - większy i mocno pogrubiony
+    // "Wpisz na wadze:" - WYRAŹNIE EKSTRA POGRUBIONY
     if (customFontBold) {
-      page.drawText('Wpisz na wadze:', {
-        x: badgeX + 3.2 * MM_TO_PT,
-        y: badgeY + 4 * MM_TO_PT,
-        size: 13,
-        font: customFontBold,
-        color: rgb(0, 0, 0),
-      });
+      drawUltraBoldText(page, 'Wpisz na wadze:', badgeX + 3.2 * MM_TO_PT, badgeY + 4 * MM_TO_PT, 13.5, customFontBold, 0.4);
     }
 
-    // Numer na wadze - EKSTRA POGRUBIONY (28pt), wyrównany do prawej (np. 247)
+    // Numer na wadze - WYRAŹNIE EKSTRA POGRUBIONY (29pt, offset 0.65 - ultra dense black)
+    if (customFontBold && item.scaleCode) {
+      const codeStr = String(item.scaleCode);
+      const codeWidth = customFontBold.widthOfTextAtSize(codeStr, 29);
+      drawUltraBoldText(
+        page,
+        codeStr,
+        badgeX + badgeWidth - codeWidth - 3.5 * MM_TO_PT,
+        badgeY + 2.5 * MM_TO_PT,
+        29,
+        customFontBold,
+        0.65
+      );
+    }
+
     const scaleField = form.createTextField(`fiszka_${i + 1}_waga`);
     scaleField.setText(item.scaleCode ?? '');
     scaleField.setAlignment(TextAlignment.Right);
     scaleField.addToPage(page, {
-      x: badgeX + badgeWidth - 28 * MM_TO_PT,
+      x: badgeX + badgeWidth - 30 * MM_TO_PT,
       y: badgeY + 0.8 * MM_TO_PT,
-      width: 26 * MM_TO_PT,
+      width: 28 * MM_TO_PT,
       height: 11.2 * MM_TO_PT,
       borderWidth: 0,
       font: customFontBold,
     });
-    scaleField.setFontSize(28);
-    scaleField.acroField.setDefaultAppearance('/Helvetica-Bold 28 Tf 0 0 0 rg');
+    scaleField.setFontSize(29);
+    scaleField.acroField.setDefaultAppearance('/Helvetica-Bold 29 Tf 0 0 0 rg');
 
-    // Set widget background to matching green (eliminates any white cutout box!)
+    // Transparent widget background so ultra-bold vector under it renders with maximum boldness!
     scaleField.acroField.getWidgets().forEach((w) => {
       w.getOrCreateAppearanceCharacteristics().setBackgroundColor([0.843, 0.961, 0.773]);
     });
@@ -293,16 +340,7 @@ export async function generateFillablePdf(
     thickness: 0.5,
   });
 
-  // Apply bold embedded font to all form field appearances
-  if (customFontBold) {
-    try {
-      form.updateFieldAppearances(customFontBold);
-    } catch {
-      // fallback
-    }
-  }
-
-  return await pdfDoc.save();
+  return await pdfDoc.save({ updateFieldAppearances: false });
 }
 
 export function downloadBlob(data: Uint8Array, filename: string) {
