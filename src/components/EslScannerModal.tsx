@@ -27,7 +27,7 @@ interface EslScannerModalProps {
   onClose: () => void;
   onApply: (
     items: FiszkaItem[],
-    target: 'activePage' | 'newPage' | 'replaceAll'
+    target: 'appendSlots' | 'activePage' | 'newPage' | 'replaceAll'
   ) => void;
   activePageIndex: number;
 }
@@ -51,8 +51,9 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [lastScanNotice, setLastScanNotice] = useState<string | null>(null);
   const [recognizedItems, setRecognizedItems] = useState<RecognizedLabel[]>([]);
-  const [targetOption, setTargetOption] = useState<'activePage' | 'newPage' | 'replaceAll'>('activePage');
+  const [targetOption, setTargetOption] = useState<'appendSlots' | 'activePage' | 'newPage' | 'replaceAll'>('appendSlots');
 
   // Camera state
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -71,6 +72,7 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
       stopCamera();
       setImagePreview(null);
       setErrorMsg(null);
+      setLastScanNotice(null);
       setCameraPermissionDenied(false);
       setIsCameraStarting(false);
       setRecognizedItems([]);
@@ -247,7 +249,7 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
     ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
     const dataUrl = canvas.toDataURL('image/jpeg', 0.90);
     setImagePreview(dataUrl);
-    stopCamera();
+    // Kamera pozostaje włączona, aby umożliwić płynne skanowanie kolejnych etykiet z rzędu
     const compressed = await compressImageForApi(dataUrl, 1920);
     runRecognition(compressed, 'image/jpeg');
   };
@@ -327,7 +329,10 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
               : (clientBarcode?.code || ''),
             priceText: it.priceText || 'Cena',
           }));
-          setRecognizedItems(formatted);
+          setRecognizedItems((prev) => [...prev, ...formatted]);
+          setLastScanNotice(
+            `Dodano ${formatted.length === 1 ? '1 etykietę' : `${formatted.length} etykiety`} do kolejki (razem fiszek: ${recognizedItems.length + formatted.length})`
+          );
           setErrorMsg(null);
           setIsScanning(false);
           return;
@@ -341,16 +346,18 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
 
     // 3. Jeśli serwer nie zadziałał (np. 405 na GitHub Pages), ale mamy odczytany kod kreskowy:
     if (clientBarcode) {
-      setRecognizedItems([
-        {
-          id: `barcode_${Date.now()}`,
-          name: 'Kod kreskowy / Kod artykułu',
-          dimension: '',
-          scaleCode: '',
-          refNumber: clientBarcode.code,
-          priceText: 'Cena',
-        },
-      ]);
+      const barcodeItem: RecognizedLabel = {
+        id: `barcode_${Date.now()}`,
+        name: 'Kod kreskowy / Kod artykułu',
+        dimension: '',
+        scaleCode: '',
+        refNumber: clientBarcode.code,
+        priceText: 'Cena',
+      };
+      setRecognizedItems((prev) => [...prev, barcodeItem]);
+      setLastScanNotice(
+        `Dodano kod kreskowy ${clientBarcode.code} (pozycja #${recognizedItems.length + 1} w kolejce)`
+      );
       setErrorMsg(null);
       return;
     }
@@ -372,19 +379,19 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
     setErrorMsg(null);
     setImagePreview(null);
     if (preset === 'single') {
-      setRecognizedItems([
-        {
-          id: `demo_${Date.now()}_1`,
-          name: 'Wkręt do drewna stożkowy',
-          dimension: '4x40 mm',
-          scaleCode: '247',
-          refNumber: '42660256',
-          priceText: '32,90 zł/kg',
-        },
-      ]);
+      const demoItem: RecognizedLabel = {
+        id: `demo_${Date.now()}_1`,
+        name: 'Wkręt do drewna stożkowy',
+        dimension: '4x40 mm',
+        scaleCode: '247',
+        refNumber: '42660256',
+        priceText: '32,90 zł/kg',
+      };
+      setRecognizedItems((prev) => [...prev, demoItem]);
+      setLastScanNotice(`Dodano przykładową etykietę: 4x40 mm (w kolejce: ${recognizedItems.length + 1})`);
     } else {
       // Cała listwa regałowa 4 etykiet
-      setRecognizedItems([
+      const demoItems: RecognizedLabel[] = [
         {
           id: `demo_${Date.now()}_1`,
           name: 'Wkręt do drewna stożkowy TX',
@@ -417,8 +424,15 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
           refNumber: '42660253',
           priceText: '34,90 zł/kg',
         },
-      ]);
+      ];
+      setRecognizedItems((prev) => [...prev, ...demoItems]);
+      setLastScanNotice(`Dodano listwę 4 etykiet (w kolejce: ${recognizedItems.length + demoItems.length})`);
     }
+  };
+
+  const handleClearScannedList = () => {
+    setRecognizedItems([]);
+    setLastScanNotice(null);
   };
 
   const handleUpdateItem = (id: string, field: keyof RecognizedLabel, value: string) => {
@@ -594,10 +608,14 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
                       e.stopPropagation();
                       fileInputRef.current?.click();
                     }}
-                    className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                    className="px-3.5 py-1.5 bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
                   >
                     <Upload className="w-3.5 h-3.5 text-slate-600" />
-                    <span>Przeglądaj pliki</span>
+                    <span>
+                      {recognizedItems.length > 0
+                        ? `Wgraj kolejne (#${recognizedItems.length + 1})`
+                        : 'Przeglądaj pliki'}
+                    </span>
                   </button>
 
                   <button
@@ -606,10 +624,14 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
                       e.stopPropagation();
                       nativeCameraInputRef.current?.click();
                     }}
-                    className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                    className="px-3.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
                   >
                     <Smartphone className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>Zrób zdjęcie aparatem</span>
+                    <span>
+                      {recognizedItems.length > 0
+                        ? `Kolejne aparatem (#${recognizedItems.length + 1})`
+                        : 'Zrób zdjęcie aparatem'}
+                    </span>
                   </button>
                 </div>
               </div>
@@ -764,16 +786,24 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
                     className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold text-xs rounded-xl flex items-center gap-2 shadow-lg transition-all cursor-pointer"
                   >
                     <Camera className="w-4 h-4" />
-                    <span>Zrób zdjęcie i odczytaj</span>
+                    <span>
+                      {recognizedItems.length > 0
+                        ? `Zeskanuj kolejną (#${recognizedItems.length + 1})`
+                        : 'Zrób zdjęcie i odczytaj'}
+                    </span>
                   </button>
 
                   <button
                     onClick={() => nativeCameraInputRef.current?.click()}
-                    className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs rounded-xl flex items-center gap-1.5 transition-all cursor-pointer border border-slate-700"
+                    className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs rounded-xl flex items-center gap-1.5 transition-all cursor-pointer border border-slate-700"
                     title="Użyj natywnego aparatu urządzenia (wyższa rozdzielczość)"
                   >
-                    <Smartphone className="w-3.5 h-3.5" />
-                    <span>Aparat natywny</span>
+                    <Smartphone className="w-3.5 h-3.5 text-emerald-400" />
+                    <span>
+                      {recognizedItems.length > 0
+                        ? `Kolejne aparatem (#${recognizedItems.length + 1})`
+                        : 'Aparat natywny'}
+                    </span>
                   </button>
                 </div>
               )}
@@ -785,9 +815,27 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
             <div className="flex items-center justify-center gap-3 p-4 bg-emerald-50 border border-emerald-200 rounded-xl">
               <RefreshCw className="w-5 h-5 text-emerald-600 animate-spin" />
               <div className="text-xs">
-                <span className="font-bold text-emerald-950 block">AI analizuje etykietę sklepową...</span>
-                <span className="text-emerald-700">Wykrywanie nazwy, wymiaru, kodu wagi oraz numeru ref.</span>
+                <span className="font-bold text-emerald-950 block">Analiza etykiety w toku...</span>
+                <span className="text-emerald-700">Wykrywanie kodu kreskowego i danych etykiety</span>
               </div>
+            </div>
+          )}
+
+          {/* POTWIERDZENIE OSTATNIEGO SKANU (SERIA / KOLEJKA) */}
+          {lastScanNotice && (
+            <div className="flex items-center justify-between px-3.5 py-2.5 bg-emerald-50 border border-emerald-300 rounded-xl text-xs font-semibold text-emerald-900 shadow-2xs">
+              <div className="flex items-center gap-2">
+                <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>{lastScanNotice}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setLastScanNotice(null)}
+                className="text-emerald-700 hover:text-emerald-950 p-1 rounded-md transition-colors cursor-pointer"
+                title="Zamknij powiadomienie"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
             </div>
           )}
 
@@ -808,20 +856,33 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-bold text-slate-800">
-                    Rozpoznane etykiety ({recognizedItems.length})
+                    Kolejka fiszek do wstawienia ({recognizedItems.length})
                   </span>
                   <span className="text-[10px] text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-full font-medium">
-                    Możesz poprawić dane przed wstawieniem
+                    Możesz skanować kolejne bez nadpisywania
                   </span>
                 </div>
 
-                <button
-                  onClick={handleAddItem}
-                  className="px-2 py-1 text-[11px] font-semibold text-slate-700 hover:text-emerald-700 bg-slate-50 hover:bg-emerald-50 border border-slate-200 rounded-lg flex items-center gap-1 transition-colors cursor-pointer"
-                >
-                  <Plus className="w-3 h-3" />
-                  <span>Dodaj wiersz</span>
-                </button>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={handleAddItem}
+                    className="px-2.5 py-1 text-[11px] font-semibold text-slate-700 hover:text-emerald-700 bg-slate-50 hover:bg-emerald-50 border border-slate-200 rounded-lg flex items-center gap-1 transition-colors cursor-pointer"
+                  >
+                    <Plus className="w-3 h-3" />
+                    <span>Dodaj wiersz</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleClearScannedList}
+                    className="px-2.5 py-1 text-[11px] font-semibold text-red-600 hover:text-red-700 bg-red-50/60 hover:bg-red-50 border border-red-200 rounded-lg flex items-center gap-1 transition-colors cursor-pointer"
+                    title="Wyczyść całą listę kolejki"
+                  >
+                    <Trash2 className="w-3 h-3" />
+                    <span>Wyczyść listę</span>
+                  </button>
+                </div>
               </div>
 
               {/* Tabela pól z możliwością bezpośredniej edycji */}
@@ -905,14 +966,25 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
               </div>
 
               {/* OPCJE MIEJSCA WSTAWIENIA */}
-              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex flex-col sm:flex-row items-center justify-between gap-3">
-                <span className="text-xs font-semibold text-slate-700 flex items-center gap-1.5">
-                  <Layers className="w-4 h-4 text-slate-500" />
-                  Gdzie wstawić rozpoznane fiszki?
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+                <span className="text-xs font-semibold text-slate-700 flex items-center gap-1.5 shrink-0">
+                  <Layers className="w-4 h-4 text-emerald-600" />
+                  Gdzie umieścić fiszki?
                 </span>
 
-                <div className="flex items-center gap-2">
-                  <label className="flex items-center gap-1 text-xs text-slate-700 cursor-pointer">
+                <div className="flex flex-wrap items-center gap-2">
+                  <label className="flex items-center gap-1.5 text-xs text-slate-800 font-semibold cursor-pointer bg-white px-2.5 py-1.5 rounded-lg border border-emerald-300 shadow-2xs">
+                    <input
+                      type="radio"
+                      name="esl_target"
+                      checked={targetOption === 'appendSlots'}
+                      onChange={() => setTargetOption('appendSlots')}
+                      className="accent-emerald-600 cursor-pointer"
+                    />
+                    <span>Kolejne wolne miejsca (str. {activePageIndex + 1})</span>
+                  </label>
+
+                  <label className="flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer bg-white px-2.5 py-1.5 rounded-lg border border-slate-200 hover:border-slate-300">
                     <input
                       type="radio"
                       name="esl_target"
@@ -920,10 +992,10 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
                       onChange={() => setTargetOption('activePage')}
                       className="accent-emerald-600 cursor-pointer"
                     />
-                    <span>Do strony {activePageIndex + 1}</span>
+                    <span>Od pozycji 1 (str. {activePageIndex + 1})</span>
                   </label>
 
-                  <label className="flex items-center gap-1 text-xs text-slate-700 cursor-pointer">
+                  <label className="flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer bg-white px-2.5 py-1.5 rounded-lg border border-slate-200 hover:border-slate-300">
                     <input
                       type="radio"
                       name="esl_target"
@@ -934,7 +1006,7 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
                     <span>Jako nową stronę A4</span>
                   </label>
 
-                  <label className="flex items-center gap-1 text-xs text-slate-700 cursor-pointer">
+                  <label className="flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer bg-white px-2.5 py-1.5 rounded-lg border border-slate-200 hover:border-slate-300">
                     <input
                       type="radio"
                       name="esl_target"

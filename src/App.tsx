@@ -375,8 +375,10 @@ export default function App() {
   // Zastosowanie etykiet rozpoznanych ze skanera ESL
   const handleApplyEslItems = (
     scannedItems: FiszkaItem[],
-    target: 'activePage' | 'newPage' | 'replaceAll'
+    target: 'appendSlots' | 'activePage' | 'newPage' | 'replaceAll' = 'appendSlots'
   ) => {
+    if (scannedItems.length === 0) return;
+
     if (target === 'replaceAll') {
       const needed = Math.max(7, Math.ceil(scannedItems.length / 7) * 7);
       const padded = [...scannedItems];
@@ -392,6 +394,7 @@ export default function App() {
       }
       setItems(padded);
       setActivePage(0);
+      scrollToPage(0);
     } else if (target === 'newPage') {
       const needed = Math.max(7, Math.ceil(scannedItems.length / 7) * 7);
       const padded = [...scannedItems];
@@ -410,25 +413,91 @@ export default function App() {
         const newPageIdx = Math.floor((items.length + padded.length - 1) / 7);
         scrollToPage(newPageIdx);
       }, 100);
+    } else if (target === 'appendSlots') {
+      // Domyślny i najwygodniejszy tryb:
+      // Szukamy kolejnych wolnych fiszek (pusty wymiar i brak nr ref) na aktywnej stronie
+      setItems((prev) => {
+        const next = [...prev];
+        const pageStart = activePage * 7;
+        const pageEnd = pageStart + 7;
+
+        // Szukamy pierwszego wolnego miejsca na aktywnej stronie
+        let currentSlot = -1;
+        for (let i = pageStart; i < Math.min(pageEnd, next.length); i++) {
+          if (!next[i].dimension?.trim() && !next[i].refNumber?.trim()) {
+            currentSlot = i;
+            break;
+          }
+        }
+
+        // Jeśli wszystkie 7 fiszek na bieżącej stronie są już zajęte, wstawiamy od kolejnej pozycji
+        if (currentSlot === -1) {
+          currentSlot = pageEnd;
+        }
+
+        scannedItems.forEach((si) => {
+          // Upewniamy się, że tablica ma wystarczającą liczbę stron (wielokrotność 7)
+          while (currentSlot >= next.length) {
+            const pageToAdd = Array.from({ length: 7 }, (_, idx) => ({
+              id: `fiszka_ext_${Date.now()}_${next.length + idx}`,
+              name: si.name || 'Wkręt do drewna',
+              dimension: '',
+              scaleCode: '',
+              refNumber: '',
+              priceText: 'Cena',
+            }));
+            next.push(...pageToAdd);
+          }
+
+          next[currentSlot] = {
+            ...next[currentSlot],
+            name: si.name,
+            dimension: si.dimension,
+            scaleCode: si.scaleCode,
+            refNumber: si.refNumber,
+            priceText: si.priceText || 'Cena',
+          };
+          currentSlot++;
+        });
+
+        return next;
+      });
+      setTimeout(() => {
+        scrollToPage(activePage);
+      }, 100);
     } else {
+      // 'activePage': Wstaw od pozycji 1 na aktywnej stronie
       const startIdx = activePage * 7;
       setItems((prev) => {
         const next = [...prev];
         scannedItems.forEach((si, i) => {
           const targetIdx = startIdx + i;
-          if (targetIdx < next.length) {
-            next[targetIdx] = {
-              ...next[targetIdx],
-              name: si.name,
-              dimension: si.dimension,
-              scaleCode: si.scaleCode,
-              refNumber: si.refNumber,
-              priceText: si.priceText,
-            };
+          while (targetIdx >= next.length) {
+            const pageToAdd = Array.from({ length: 7 }, (_, idx) => ({
+              id: `fiszka_ext_${Date.now()}_${next.length + idx}`,
+              name: si.name || 'Wkręt do drewna',
+              dimension: '',
+              scaleCode: '',
+              refNumber: '',
+              priceText: 'Cena',
+            }));
+            next.push(...pageToAdd);
           }
+
+          next[targetIdx] = {
+            ...next[targetIdx],
+            name: si.name,
+            dimension: si.dimension,
+            scaleCode: si.scaleCode,
+            refNumber: si.refNumber,
+            priceText: si.priceText || 'Cena',
+          };
         });
         return next;
       });
+      setTimeout(() => {
+        scrollToPage(activePage);
+      }, 100);
     }
   };
 
