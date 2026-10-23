@@ -17,8 +17,10 @@ import {
   VideoOff,
   ShieldAlert,
   Smartphone,
+  Barcode,
 } from 'lucide-react';
 import { FiszkaItem } from '../types/label';
+import { scanBarcodeClientSide, DecodedBarcodeResult } from '../utils/barcodeScanner';
 
 interface EslScannerModalProps {
   isOpen: boolean;
@@ -279,10 +281,24 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
     }
   };
 
-  // Skanowanie i ekstrakcja danych przez Gemini API
+  // Skanowanie: hybrydowe (lokalny czytnik kodów kreskowych + Gemini Vision)
   const runRecognition = async (base64Image: string, mimeType: string) => {
     setIsScanning(true);
     setErrorMsg(null);
+
+    // 1. Zawsze próbujemy dekodować kod kreskowy/QR natychmiast w przeglądarce
+    let clientBarcode: DecodedBarcodeResult | null = null;
+    try {
+      clientBarcode = await scanBarcodeClientSide(base64Image);
+      if (clientBarcode) {
+        console.log('Zdekodowano kod kreskowy lokalnie:', clientBarcode.code);
+      }
+    } catch (e) {
+      console.warn('Lokalny skaner kodów:', e);
+    }
+
+    // 2. Próbujemy wysłać do serwera Gemini AI Vision
+    let serverStatus: number | null = null;
 
     try {
       const response = await fetch('/api/scan-esl', {
@@ -296,34 +312,58 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
         }),
       });
 
-      if (!response.ok) {
-        // Fallback or server error
-        const errData = await response.json().catch(() => ({}));
-        throw new Error(errData.error || `Błąd serwera (${response.status})`);
-      }
+      serverStatus = response.status;
 
-      const data = await response.json();
-      if (data.success && Array.isArray(data.items) && data.items.length > 0) {
-        const formatted: RecognizedLabel[] = data.items.map((it: any, idx: number) => ({
-          id: `scanned_${Date.now()}_${idx}`,
-          name: it.name || 'Wkręt do drewna',
-          dimension: it.dimension || '',
-          scaleCode: it.scaleCode ? String(it.scaleCode).replace(/\D/g, '') : '',
-          refNumber: it.refNumber ? String(it.refNumber).replace(/\D/g, '') : '',
-          priceText: it.priceText || 'Cena',
-        }));
-        setRecognizedItems(formatted);
-      } else {
-        setErrorMsg('Nie wykryto czytelnych etykiet na tym zdjęciu. Spróbuj zrobić wyraźniejsze zdjęcie z bliska.');
+      if (response.ok) {
+        const data = await response.json().catch(() => ({}));
+        if (data.success && Array.isArray(data.items) && data.items.length > 0) {
+          const formatted: RecognizedLabel[] = data.items.map((it: any, idx: number) => ({
+            id: `scanned_${Date.now()}_${idx}`,
+            name: it.name || (clientBarcode ? 'Kod odbioru / Artykuł' : 'Wkręt do drewna'),
+            dimension: it.dimension || '',
+            scaleCode: it.scaleCode ? String(it.scaleCode).replace(/\D/g, '') : '',
+            refNumber: it.refNumber
+              ? String(it.refNumber).replace(/\s+/g, '')
+              : (clientBarcode?.code || ''),
+            priceText: it.priceText || 'Cena',
+          }));
+          setRecognizedItems(formatted);
+          setErrorMsg(null);
+          setIsScanning(false);
+          return;
+        }
       }
     } catch (err: any) {
       console.warn('Błąd wywołania API rozpoznawania:', err);
-      // Jeśli jesteśmy na statycznym hostingu (np. GitHub Pages gdzie /api/scan-esl nie istnieje)
-      setErrorMsg(
-        err.message || 'Wystąpił błąd podczas analizy obrazu. Upewnij się, że zdjęcie jest ostre i dobrze oświetlone.'
-      );
     } finally {
       setIsScanning(false);
+    }
+
+    // 3. Jeśli serwer nie zadziałał (np. 405 na GitHub Pages), ale mamy odczytany kod kreskowy:
+    if (clientBarcode) {
+      setRecognizedItems([
+        {
+          id: `barcode_${Date.now()}`,
+          name: 'Kod kreskowy / Kod artykułu',
+          dimension: '',
+          scaleCode: '',
+          refNumber: clientBarcode.code,
+          priceText: 'Cena',
+        },
+      ]);
+      setErrorMsg(null);
+      return;
+    }
+
+    // 4. Jeśli serwer zwrócił 405 (GitHub Pages) i nie znaleziono kodu kreskowego
+    if (serverStatus === 405 || serverStatus === 404) {
+      setErrorMsg(
+        'GitHub Pages jest hostingiem statycznym (brak backendu POST / błąd 405). Kody kreskowe i QR są dekodowane bezpośrednio w przeglądarce. Na tym ujęciu nie wykryto kodu kreskowego — skieruj aparat centralnie na kod kreskowy lub dodaj pozycję przyciskiem „Dodaj wiersz”.'
+      );
+    } else {
+      setErrorMsg(
+        'Nie wykryto czytelnych etykiet ani kodu kreskowego na tym zdjęciu. Spróbuj zrobić wyraźniejsze zdjęcie z bliska.'
+      );
     }
   };
 
