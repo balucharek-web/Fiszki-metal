@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a" />
+      <stop offset="100%" stop-color="#047857" />
+    </linearGradient>
+    <linearGradient id="badgeGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#d7f5c5" />
+      <stop offset="100%" stop-color="#86efac" />
+    </linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="130%" height="130%">
+      <feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="#000000" flood-opacity="0.35" />
+    </filter>
+  </defs>
+
+  <!-- Background rounded squircle -->
+  <rect x="2" y="2" width="60" height="60" rx="14" fill="url(#bgGrad)" stroke="#10b981" stroke-width="1.5" />
+
+  <!-- Mini A4 label card representation inside -->
+  <rect x="8" y="10" width="48" height="44" rx="6" fill="#ffffff" filter="url(#shadow)" />
+  
+  <!-- Top green border representing shelf label -->
+  <path d="M 8 16 A 6 6 0 0 1 14 10 L 50 10 A 6 6 0 0 1 56 16 L 56 18 L 8 18 Z" fill="#059669" />
+
+  <!-- Standers iconic interlocking loops (centered on label) -->
+  <g transform="translate(14, 21) scale(0.26)">
+    <!-- Upper loop -->
+    <path
+      d="M 50 4 L 105 4 A 18 18 0 0 1 123 22 A 18 18 0 0 1 105 40 L 50 40 A 18 18 0 0 1 32 22 A 18 18 0 0 1 50 4 Z"
+      fill="#0f172a"
+    />
+    <path
+      d="M 50 16 L 105 16 A 6 6 0 0 1 111 22 A 6 6 0 0 1 105 28 L 50 28 A 6 6 0 0 1 44 22 A 6 6 0 0 1 50 16 Z"
+      fill="#ffffff"
+    />
+    <!-- Lower loop -->
+    <path
+      d="M 35 34 L 90 34 A 18 18 0 0 1 108 52 A 18 18 0 0 1 90 70 L 35 70 A 18 18 0 0 1 17 52 A 18 18 0 0 1 35 34 Z"
+      fill="#0f172a"
+    />
+    <path
+      d="M 35 46 L 90 46 A 6 6 0 0 1 96 52 A 6 6 0 0 1 90 58 L 35 58 A 6 6 0 0 1 29 52 A 6 6 0 0 1 35 46 Z"
+      fill="#ffffff"
+    />
+  </g>
+
+  <!-- Weight code badge in bottom right (characteristic of Standers fiszka) -->
+  <rect x="36" y="38" width="16" height="12" rx="3" fill="url(#badgeGrad)" stroke="#15803d" stroke-width="0.8" />
+  <text x="44" y="47" font-family="'JetBrains Mono', monospace" font-size="7.5" font-weight="900" fill="#0f172a" text-anchor="middle">247</text>
+</svg>
