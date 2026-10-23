@@ -1,42 +1,8 @@
-import { PDFDocument, rgb, TextAlignment, PDFName, PDFString, PDFFont, PDFPage } from 'pdf-lib';
+import { PDFDocument, rgb, TextAlignment, PDFName, PDFString, PDFFont, StandardFonts } from 'pdf-lib';
 import fontkit from '@pdf-lib/fontkit';
 import { FiszkaItem } from '../types/label';
 
 const MM_TO_PT = 72 / 25.4; // 1 mm = ~2.83465 pt
-
-// Multi-directional offset text renderer to simulate CSS -webkit-text-stroke in PDF vectors
-function drawUltraBoldText(
-  page: PDFPage,
-  text: string,
-  x: number,
-  y: number,
-  size: number,
-  font: PDFFont,
-  offset = 0.45,
-  color = rgb(0, 0, 0)
-) {
-  if (!text) return;
-  const offsets = [
-    [-offset, 0],
-    [offset, 0],
-    [0, -offset],
-    [0, offset],
-    [-offset, -offset],
-    [offset, -offset],
-    [-offset, offset],
-    [offset, offset],
-    [0, 0],
-  ];
-  for (const [dx, dy] of offsets) {
-    page.drawText(text, {
-      x: x + dx,
-      y: y + dy,
-      size,
-      font,
-      color,
-    });
-  }
-}
 
 export async function generateFillablePdf(
   items: FiszkaItem[],
@@ -63,6 +29,10 @@ export async function generateFillablePdf(
     }
   }
 
+  // Load standard HelveticaBold as universal font fallback
+  const helvBold = await pdfDoc.embedStandardFont(StandardFonts.HelveticaBold);
+  const boldFont = customFontBold || helvBold;
+
   // Load Standers 1:1 Transparent Logo PNG
   let embeddedLogo;
   if (logoPngBytes) {
@@ -87,6 +57,20 @@ export async function generateFillablePdf(
 
   const page = pdfDoc.addPage([pageWidth, pageHeight]);
   const form = pdfDoc.getForm();
+
+  // Set up AcroForm Default Resources (DR) so PDF viewers (Acrobat, Chrome, Preview)
+  // correctly find and render bold fonts in interactive fields
+  const dr = pdfDoc.context.obj({});
+  const fontDict = pdfDoc.context.obj({});
+  fontDict.set(PDFName.of('Helvetica-Bold'), boldFont.ref);
+  fontDict.set(PDFName.of('HeBo'), helvBold.ref);
+  fontDict.set(PDFName.of('Helvetica'), boldFont.ref);
+  if (customFontBold) {
+    fontDict.set(PDFName.of('LiberationSans-Bold'), customFontBold.ref);
+    fontDict.set(PDFName.of('CustomBold'), customFontBold.ref);
+  }
+  dr.set(PDFName.of('Font'), fontDict);
+  form.acroForm.dict.set(PDFName.of('DR'), dr);
 
   // Helper to attach auto-empty on focus and restore on empty blur to AcroForm field
   const attachAutoClearAction = (field: any, fieldKey: string) => {
@@ -164,11 +148,10 @@ export async function generateFillablePdf(
     const middleWidth = 84 * MM_TO_PT;
 
     // Row 1: Nazwa towaru (np. "Wkręt do drewna")
-    if (customFontBold && item.name) {
-      drawUltraBoldText(page, item.name, middleX + 0.5 * MM_TO_PT, yBottom + 27 * MM_TO_PT, 14, customFontBold, 0.3);
-    }
     const nameField = form.createTextField(`fiszka_${i + 1}_nazwa`);
-    nameField.setText(item.name ?? '');
+    if (item.name) {
+      nameField.setText(item.name);
+    }
     nameField.setAlignment(TextAlignment.Left);
     nameField.addToPage(page, {
       x: middleX,
@@ -176,17 +159,25 @@ export async function generateFillablePdf(
       width: middleWidth,
       height: 11 * MM_TO_PT,
       borderWidth: 0,
-      font: customFontBold,
+      font: boldFont,
     });
     nameField.setFontSize(14);
+    nameField.acroField.setDefaultAppearance('/Helvetica-Bold 14 Tf 0 0 0 rg');
+    nameField.acroField.getWidgets()[0].dict.set(PDFName.of('DR'), dr);
+    if (item.name) {
+      try {
+        nameField.updateAppearances(boldFont);
+      } catch {
+        // ignore
+      }
+    }
     attachAutoClearAction(nameField, `nazwa_${i + 1}`);
 
-    // Row 2: Wymiar (np. "6x80 mm") - EKSTRA POGRUBIONY (Ultra-bold vector)
-    if (customFontBold && item.dimension) {
-      drawUltraBoldText(page, item.dimension, middleX + 0.5 * MM_TO_PT, yBottom + 15 * MM_TO_PT, 18, customFontBold, 0.45);
-    }
+    // Row 2: Wymiar (np. "6x80 mm") - wyraźnie pogrubiony
     const dimField = form.createTextField(`fiszka_${i + 1}_wymiar`);
-    dimField.setText(item.dimension ?? '');
+    if (item.dimension) {
+      dimField.setText(item.dimension);
+    }
     dimField.setAlignment(TextAlignment.Left);
     dimField.addToPage(page, {
       x: middleX,
@@ -194,10 +185,18 @@ export async function generateFillablePdf(
       width: middleWidth,
       height: 11 * MM_TO_PT,
       borderWidth: 0,
-      font: customFontBold,
+      font: boldFont,
     });
     dimField.setFontSize(18);
     dimField.acroField.setDefaultAppearance('/Helvetica-Bold 18 Tf 0 0 0 rg');
+    dimField.acroField.getWidgets()[0].dict.set(PDFName.of('DR'), dr);
+    if (item.dimension) {
+      try {
+        dimField.updateAppearances(boldFont);
+      } catch {
+        // ignore
+      }
+    }
     attachAutoClearAction(dimField, `wymiar_${i + 1}`);
 
     // Row 3: Zaokrąglony zielony pasek DOKŁADNIE 7,5 cm (75mm) z numerem wagi (#d7f5c5)
@@ -217,44 +216,43 @@ export async function generateFillablePdf(
     page.drawRectangle({ x: badgeX, y: badgeY + badgeR, width: badgeR, height: badgeHeight - 2 * badgeR, color: greenColor });
     page.drawRectangle({ x: badgeX + badgeWidth - badgeR, y: badgeY + badgeR, width: badgeR, height: badgeHeight - 2 * badgeR, color: greenColor });
 
-    // "Wpisz na wadze:" - WYRAŹNIE EKSTRA POGRUBIONY
-    if (customFontBold) {
-      drawUltraBoldText(page, 'Wpisz na wadze:', badgeX + 3.2 * MM_TO_PT, badgeY + 4 * MM_TO_PT, 13.5, customFontBold, 0.4);
-    }
+    // "Wpisz na wadze:" - pojedynczy, czysty, ostry napis o idealnej grubości (BEZ sztucznego wielokrotnego nakładania)
+    page.drawText('Wpisz na wadze:', {
+      x: badgeX + 3.2 * MM_TO_PT,
+      y: badgeY + 4.2 * MM_TO_PT,
+      size: 13.5,
+      font: boldFont,
+      color: rgb(0, 0, 0),
+    });
 
-    // Numer na wadze - WYRAŹNIE EKSTRA POGRUBIONY (29pt, offset 0.65 - ultra dense black)
-    if (customFontBold && item.scaleCode) {
-      const codeStr = String(item.scaleCode);
-      const codeWidth = customFontBold.widthOfTextAtSize(codeStr, 29);
-      drawUltraBoldText(
-        page,
-        codeStr,
-        badgeX + badgeWidth - codeWidth - 3.5 * MM_TO_PT,
-        badgeY + 2.5 * MM_TO_PT,
-        29,
-        customFontBold,
-        0.65
-      );
-    }
-
+    // Numer na wadze - pogrubiony, duży (28pt), widoczny zarówno przy wypełnieniu jak i przy pisaniu w pustym szablonie
     const scaleField = form.createTextField(`fiszka_${i + 1}_waga`);
-    scaleField.setText(item.scaleCode ?? '');
+    if (item.scaleCode) {
+      scaleField.setText(String(item.scaleCode));
+    }
     scaleField.setAlignment(TextAlignment.Right);
     scaleField.addToPage(page, {
-      x: badgeX + badgeWidth - 30 * MM_TO_PT,
+      x: badgeX + badgeWidth - 32 * MM_TO_PT,
       y: badgeY + 0.8 * MM_TO_PT,
-      width: 28 * MM_TO_PT,
+      width: 30 * MM_TO_PT,
       height: 11.2 * MM_TO_PT,
       borderWidth: 0,
-      font: customFontBold,
+      font: boldFont,
     });
-    scaleField.setFontSize(29);
-    scaleField.acroField.setDefaultAppearance('/Helvetica-Bold 29 Tf 0 0 0 rg');
+    scaleField.setFontSize(28);
+    scaleField.acroField.setDefaultAppearance('/Helvetica-Bold 28 Tf 0 0 0 rg');
 
-    // Transparent widget background so ultra-bold vector under it renders with maximum boldness!
-    scaleField.acroField.getWidgets().forEach((w) => {
-      w.getOrCreateAppearanceCharacteristics().setBackgroundColor([0.843, 0.961, 0.773]);
-    });
+    const scaleWidget = scaleField.acroField.getWidgets()[0];
+    scaleWidget.dict.set(PDFName.of('DR'), dr);
+    scaleWidget.getOrCreateAppearanceCharacteristics().setBackgroundColor([0.843, 0.961, 0.773]);
+
+    if (item.scaleCode) {
+      try {
+        scaleField.updateAppearances(boldFont);
+      } catch {
+        // ignore
+      }
+    }
     attachAutoClearAction(scaleField, `waga_${i + 1}`);
 
     // 4. Right Section: Czarna ramka 5.5 cm szerokości × 3.7 cm wysokości (55mm x 37mm) z marginesem 5mm od końca
@@ -275,7 +273,9 @@ export async function generateFillablePdf(
 
     // Field 4: Cena inside black frame (top, right aligned)
     const priceField = form.createTextField(`fiszka_${i + 1}_cena`);
-    priceField.setText(item.priceText ?? '');
+    if (item.priceText) {
+      priceField.setText(item.priceText);
+    }
     priceField.setAlignment(TextAlignment.Right);
     priceField.addToPage(page, {
       x: frameX + 2 * MM_TO_PT,
@@ -283,26 +283,34 @@ export async function generateFillablePdf(
       width: frameWidth - 4 * MM_TO_PT,
       height: 9.5 * MM_TO_PT,
       borderWidth: 0,
-      font: customFontBold,
+      font: boldFont,
     });
     priceField.setFontSize(11.5);
     priceField.acroField.setDefaultAppearance('/Helvetica-Bold 11.5 Tf 0 0 0 rg');
+    priceField.acroField.getWidgets()[0].dict.set(PDFName.of('DR'), dr);
+    if (item.priceText) {
+      try {
+        priceField.updateAppearances(boldFont);
+      } catch {
+        // ignore
+      }
+    }
     attachAutoClearAction(priceField, `cena_${i + 1}`);
 
     // "Ref:" static label inside black frame (bottom)
-    if (customFontBold) {
-      page.drawText('Ref:', {
-        x: frameX + 5 * MM_TO_PT,
-        y: frameY + 3.8 * MM_TO_PT,
-        size: 10.5,
-        font: customFontBold,
-        color: rgb(0, 0, 0),
-      });
-    }
+    page.drawText('Ref:', {
+      x: frameX + 5 * MM_TO_PT,
+      y: frameY + 3.8 * MM_TO_PT,
+      size: 10.5,
+      font: boldFont,
+      color: rgb(0, 0, 0),
+    });
 
     // Field 5: Ref Number inside black frame (bottom, right aligned)
     const refField = form.createTextField(`fiszka_${i + 1}_ref`);
-    refField.setText(item.refNumber ?? '');
+    if (item.refNumber) {
+      refField.setText(item.refNumber);
+    }
     refField.setAlignment(TextAlignment.Right);
     refField.addToPage(page, {
       x: frameX + 14 * MM_TO_PT,
@@ -310,10 +318,18 @@ export async function generateFillablePdf(
       width: frameWidth - 17 * MM_TO_PT,
       height: 9 * MM_TO_PT,
       borderWidth: 0,
-      font: customFontBold,
+      font: boldFont,
     });
     refField.setFontSize(11);
     refField.acroField.setDefaultAppearance('/Helvetica-Bold 11 Tf 0 0 0 rg');
+    refField.acroField.getWidgets()[0].dict.set(PDFName.of('DR'), dr);
+    if (item.refNumber) {
+      try {
+        refField.updateAppearances(boldFont);
+      } catch {
+        // ignore
+      }
+    }
     attachAutoClearAction(refField, `ref_${i + 1}`);
   }
 
