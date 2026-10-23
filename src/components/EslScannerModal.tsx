@@ -55,7 +55,7 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [lastScanNotice, setLastScanNotice] = useState<string | null>(null);
   const [recognizedItems, setRecognizedItems] = useState<RecognizedLabel[]>([]);
-  const [targetOption, setTargetOption] = useState<'appendSlots' | 'activePage' | 'newPage' | 'replaceAll'>('appendSlots');
+  const [targetOption, setTargetOption] = useState<'appendSlots' | 'activePage' | 'newPage' | 'replaceAll'>('replaceAll');
 
   // Camera state
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -319,19 +319,45 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
       if (response.ok) {
         const data = await response.json().catch(() => ({}));
         if (data.success && Array.isArray(data.items) && data.items.length > 0) {
-          const formatted: RecognizedLabel[] = data.items.map((it: any, idx: number) => ({
-            id: `scanned_${Date.now()}_${idx}`,
-            name: it.name || (clientBarcode ? 'Kod odbioru / Artykuł' : 'Wkręt do drewna'),
-            dimension: it.dimension || '',
-            scaleCode: it.scaleCode ? String(it.scaleCode).replace(/\D/g, '') : '',
-            refNumber: it.refNumber
-              ? String(it.refNumber).replace(/\s+/g, '')
-              : (clientBarcode?.code || ''),
-            priceText: it.priceText || 'Cena',
-          }));
+          const formatted: RecognizedLabel[] = data.items.map((it: any, idx: number) => {
+            // 1. Numer referencyjny: 8 cyfr lub EAN-13, ignorujemy pionowy kod zawieszki ESL (np. 147...)
+            let ref = it.refNumber ? String(it.refNumber).replace(/\D/g, '') : '';
+            if (ref.startsWith('147') && ref.length >= 13) ref = '';
+            if (!ref && clientBarcode?.code) {
+              ref = clientBarcode.code;
+            }
+
+            // 2. Kod wagi: czyste cyfry (np. 169)
+            let scale = it.scaleCode ? String(it.scaleCode).replace(/\D/g, '') : '';
+            let name = (it.name || '').trim();
+
+            // Jeśli nazwa zawiera kod wagi na początku (np. "169 Wkręt uniwersalny"):
+            const leadingScale = name.match(/^([0-9]{2,3})[\s\.\:\-]+(.*)/);
+            if (leadingScale) {
+              if (!scale) scale = leadingScale[1];
+              name = leadingScale[2].trim();
+            }
+            if (!name) name = clientBarcode ? 'Artykuł z kodu kreskowego' : 'Wkręt do drewna';
+
+            // 3. Wymiar: normalizacja z mm
+            let dim = (it.dimension || '').trim();
+            if (dim && !dim.toLowerCase().endsWith('mm') && !dim.toLowerCase().startsWith('m')) {
+              dim = `${dim} mm`;
+            }
+
+            return {
+              id: `scanned_${Date.now()}_${idx}`,
+              name,
+              dimension: dim,
+              scaleCode: scale,
+              refNumber: ref,
+              priceText: it.priceText || 'Cena',
+            };
+          });
+
           setRecognizedItems((prev) => [...prev, ...formatted]);
           setLastScanNotice(
-            `Dodano ${formatted.length === 1 ? '1 etykietę' : `${formatted.length} etykiety`} do kolejki (razem fiszek: ${recognizedItems.length + formatted.length})`
+            `Dodano ${formatted.length === 1 ? '1 etykietę' : `${formatted.length} etykiety`} do kolejki (razem w kolejce: ${recognizedItems.length + formatted.length})`
           );
           setErrorMsg(null);
           setIsScanning(false);
@@ -342,7 +368,7 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
       console.warn('Backend niedostępny (np. hosting statyczny GitHub Pages):', err);
     }
 
-    // 3. Rozpoznawanie tekstu OCR po stronie klienta w przeglądarce (rozwiązuje brak backendu 405 na GitHub Pages)
+    // 3. Rozpoznawanie tekstu OCR po stronie klienta w przeglądarce (fallback gdy brak sieci)
     setScanStatusText('Odczytywanie danych etykiety ESL (OCR w przeglądarce)...');
     let ocrResult: OcrRecognizedLabel | null = null;
     try {
@@ -357,24 +383,48 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
 
     // 4. Jeśli OCR lub dekoder kodów kreskowych odczytał dane etykiety:
     if (ocrResult || clientBarcode) {
-      const finalName = ocrResult?.name || (clientBarcode ? 'Artykuł z kodu kreskowego' : 'Wkręt do drewna');
-      const finalDimension = ocrResult?.dimension || '';
-      const finalScaleCode = ocrResult?.scaleCode || '';
-      const finalRefNumber = clientBarcode?.code || ocrResult?.refNumber || '';
+      let finalRefNumber = '';
+      if (ocrResult?.refNumber && ocrResult.refNumber.length === 8) {
+        finalRefNumber = ocrResult.refNumber;
+      } else if (ocrResult?.refNumber && ocrResult.refNumber.length === 13) {
+        finalRefNumber = ocrResult.refNumber;
+      } else if (clientBarcode?.code) {
+        finalRefNumber = clientBarcode.code;
+      } else {
+        finalRefNumber = ocrResult?.refNumber || '';
+      }
+      if (finalRefNumber.startsWith('147') && finalRefNumber.length >= 13) {
+        finalRefNumber = '';
+      }
+
+      let finalScale = ocrResult?.scaleCode ? String(ocrResult.scaleCode).replace(/\D/g, '') : '';
+      let finalName = (ocrResult?.name || '').trim();
+      const leadingMatch = finalName.match(/^([0-9]{2,3})[\s\.\:\-]+(.*)/);
+      if (leadingMatch) {
+        if (!finalScale) finalScale = leadingMatch[1];
+        finalName = leadingMatch[2].trim();
+      }
+      if (!finalName) finalName = clientBarcode ? 'Artykuł z kodu kreskowego' : 'Wkręt do drewna';
+
+      let finalDimension = (ocrResult?.dimension || '').trim();
+      if (finalDimension && !finalDimension.toLowerCase().endsWith('mm') && !finalDimension.toLowerCase().startsWith('m')) {
+        finalDimension = `${finalDimension} mm`;
+      }
+
       const finalPrice = ocrResult?.priceText || 'Cena';
 
       const recognizedItem: RecognizedLabel = {
         id: `scanned_${Date.now()}`,
         name: finalName,
         dimension: finalDimension,
-        scaleCode: finalScaleCode,
+        scaleCode: finalScale,
         refNumber: finalRefNumber,
         priceText: finalPrice,
       };
 
       setRecognizedItems((prev) => [...prev, recognizedItem]);
       setLastScanNotice(
-        `✓ Odczytano: ${finalName}${finalDimension ? ` ${finalDimension}` : ''} | Kod wagi: ${finalScaleCode || '—'} | Nr ref: ${finalRefNumber || '—'} (pozycja #${recognizedItems.length + 1})`
+        `✓ Odczytano: ${finalName}${finalDimension ? ` ${finalDimension}` : ''} | Kod wagi: ${finalScale || '—'} | Nr ref: ${finalRefNumber || '—'} (pozycja #${recognizedItems.length + 1})`
       );
       setErrorMsg(null);
       return;
@@ -977,56 +1027,108 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
                 </table>
               </div>
 
+              {/* PODSUMOWANIE STRON A4 */}
+              <div className="bg-emerald-50 border border-emerald-200 rounded-xl p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <Sparkles className="w-4 h-4 text-emerald-600 shrink-0" />
+                  <span className="text-xs font-bold text-emerald-950">
+                    Format A4 (19.5 x 4 cm):
+                  </span>
+                  <span className="text-xs text-emerald-800">
+                    <strong>{recognizedItems.length}</strong> {recognizedItems.length === 1 ? 'fiszka' : 'fiszek'} zajmie dokładnie <strong>{Math.ceil(recognizedItems.length / 7)}</strong> {Math.ceil(recognizedItems.length / 7) === 1 ? 'stronę A4' : (Math.ceil(recognizedItems.length / 7) < 5 ? 'strony A4' : 'stron A4')} ({Math.min(7, recognizedItems.length)} na str. 1{recognizedItems.length > 7 ? `, ${recognizedItems.length - 7} na str. 2` : ''})
+                  </span>
+                </div>
+              </div>
+
               {/* OPCJE MIEJSCA WSTAWIENIA */}
-              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
-                <span className="text-xs font-semibold text-slate-700 flex items-center gap-1.5 shrink-0">
+              <div className="bg-slate-50 border border-slate-200 rounded-xl p-3 flex flex-col gap-2.5">
+                <span className="text-xs font-semibold text-slate-800 flex items-center gap-1.5">
                   <Layers className="w-4 h-4 text-emerald-600" />
-                  Gdzie umieścić fiszki?
+                  Gdzie umieścić zeskanowane fiszki?
                 </span>
 
-                <div className="flex flex-wrap items-center gap-2">
-                  <label className="flex items-center gap-1.5 text-xs text-slate-800 font-semibold cursor-pointer bg-white px-2.5 py-1.5 rounded-lg border border-emerald-300 shadow-2xs">
-                    <input
-                      type="radio"
-                      name="esl_target"
-                      checked={targetOption === 'appendSlots'}
-                      onChange={() => setTargetOption('appendSlots')}
-                      className="accent-emerald-600 cursor-pointer"
-                    />
-                    <span>Kolejne wolne miejsca (str. {activePageIndex + 1})</span>
-                  </label>
-
-                  <label className="flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer bg-white px-2.5 py-1.5 rounded-lg border border-slate-200 hover:border-slate-300">
-                    <input
-                      type="radio"
-                      name="esl_target"
-                      checked={targetOption === 'activePage'}
-                      onChange={() => setTargetOption('activePage')}
-                      className="accent-emerald-600 cursor-pointer"
-                    />
-                    <span>Od pozycji 1 (str. {activePageIndex + 1})</span>
-                  </label>
-
-                  <label className="flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer bg-white px-2.5 py-1.5 rounded-lg border border-slate-200 hover:border-slate-300">
-                    <input
-                      type="radio"
-                      name="esl_target"
-                      checked={targetOption === 'newPage'}
-                      onChange={() => setTargetOption('newPage')}
-                      className="accent-emerald-600 cursor-pointer"
-                    />
-                    <span>Jako nową stronę A4</span>
-                  </label>
-
-                  <label className="flex items-center gap-1.5 text-xs text-slate-700 cursor-pointer bg-white px-2.5 py-1.5 rounded-lg border border-slate-200 hover:border-slate-300">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <label className={`flex items-start gap-2 text-xs p-2.5 rounded-xl border transition-all cursor-pointer ${
+                    targetOption === 'replaceAll'
+                      ? 'bg-emerald-50/70 border-emerald-400 text-emerald-950 font-semibold shadow-xs'
+                      : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300'
+                  }`}>
                     <input
                       type="radio"
                       name="esl_target"
                       checked={targetOption === 'replaceAll'}
                       onChange={() => setTargetOption('replaceAll')}
-                      className="accent-emerald-600 cursor-pointer"
+                      className="accent-emerald-600 cursor-pointer mt-0.5"
                     />
-                    <span>Zastąp wszystkie</span>
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="font-bold">Czysty arkusz — zastąp wszystko</span>
+                        <span className="text-[10px] bg-emerald-600 text-white px-1.5 py-0.2 rounded-full font-bold">Zalecane</span>
+                      </div>
+                      <span className="text-[11px] text-slate-500 font-normal block leading-tight mt-0.5">
+                        Tworzy czyste arkusze bez starych danych (dokładnie {Math.ceil(recognizedItems.length / 7)} {Math.ceil(recognizedItems.length / 7) === 1 ? 'strona' : 'strony'})
+                      </span>
+                    </div>
+                  </label>
+
+                  <label className={`flex items-start gap-2 text-xs p-2.5 rounded-xl border transition-all cursor-pointer ${
+                    targetOption === 'activePage'
+                      ? 'bg-emerald-50/70 border-emerald-400 text-emerald-950 font-semibold shadow-xs'
+                      : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300'
+                  }`}>
+                    <input
+                      type="radio"
+                      name="esl_target"
+                      checked={targetOption === 'activePage'}
+                      onChange={() => setTargetOption('activePage')}
+                      className="accent-emerald-600 cursor-pointer mt-0.5"
+                    />
+                    <div>
+                      <span className="font-bold block">Od fiszki #1 na stronie {activePageIndex + 1}</span>
+                      <span className="text-[11px] text-slate-500 font-normal block leading-tight mt-0.5">
+                        Wypełnia po kolei od góry bieżącej strony i przechodzi na kolejną
+                      </span>
+                    </div>
+                  </label>
+
+                  <label className={`flex items-start gap-2 text-xs p-2.5 rounded-xl border transition-all cursor-pointer ${
+                    targetOption === 'appendSlots'
+                      ? 'bg-emerald-50/70 border-emerald-400 text-emerald-950 font-semibold shadow-xs'
+                      : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300'
+                  }`}>
+                    <input
+                      type="radio"
+                      name="esl_target"
+                      checked={targetOption === 'appendSlots'}
+                      onChange={() => setTargetOption('appendSlots')}
+                      className="accent-emerald-600 cursor-pointer mt-0.5"
+                    />
+                    <div>
+                      <span className="font-bold block">Wypełnij kolejne puste miejsca</span>
+                      <span className="text-[11px] text-slate-500 font-normal block leading-tight mt-0.5">
+                        Szuka pierwszego pustego pola bez wymiaru
+                      </span>
+                    </div>
+                  </label>
+
+                  <label className={`flex items-start gap-2 text-xs p-2.5 rounded-xl border transition-all cursor-pointer ${
+                    targetOption === 'newPage'
+                      ? 'bg-emerald-50/70 border-emerald-400 text-emerald-950 font-semibold shadow-xs'
+                      : 'bg-white border-slate-200 text-slate-700 hover:border-slate-300'
+                  }`}>
+                    <input
+                      type="radio"
+                      name="esl_target"
+                      checked={targetOption === 'newPage'}
+                      onChange={() => setTargetOption('newPage')}
+                      className="accent-emerald-600 cursor-pointer mt-0.5"
+                    />
+                    <div>
+                      <span className="font-bold block">Jako nową stronę A4 na końcu</span>
+                      <span className="text-[11px] text-slate-500 font-normal block leading-tight mt-0.5">
+                        Zachowuje dotychczasowe arkusze i dodaje nową stronę
+                      </span>
+                    </div>
                   </label>
                 </div>
               </div>

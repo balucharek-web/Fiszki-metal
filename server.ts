@@ -43,24 +43,37 @@ app.post('/api/scan-esl', async (req, res) => {
       safeMime = 'image/jpeg';
     }
 
-    const promptText = `Jesteś ekspertem w odczytywaniu:
-1. Sklepowych etykiet cenowych ESL (Electronic Shelf Labels, e-papier, wyświetlacze LCD/E-ink) oraz tradycyjnych papierowych etykiet regałowych z działu metalowego (np. Standers, śruby, wkręty, nakrętki, podkładki, kołki).
-2. Kodów kreskowych, etykiet magazynowych, paczkowych, biletów i potwierdzeń z kodami/PIN.
+    const promptText = `Jesteś wyspecjalizowanym systemem OCR do etykiet regałowych ESL (elektroniczne etykiety cenowe e-papier/LCD, np. Leroy Merlin / Standers) oraz etykiet papierowych z działu metalowego (śruby, wkręty, nakrętki, kołki).
 
-Przeanalizuj przesłane zdjęcie i wyodrębnij WSZYSTKIE pozycje widoczne na ujęciu (od 1 do kilku):
+BARDZO WAŻNE REGUŁY EKSTRAKCJI:
+1. PIONOWY KOD KRESKOWY PO PRAWEJ STRONIE (NA RAMCE/OBUDOWIE ETYKIETY ESL):
+   - BEZWZGLĘDNIE ZIGNORUJ pionowy kod kreskowy! To jest techniczny kod seryjny zawieszki ESL (np. 1474507509...). NIGDY nie używaj go jako numeru referencyjnego ani kodu wagi!
 
-Dla każdej wykrytej etykiety lub kodu podaj:
-- "name": Nazwa artykułu lub opis etykiety/kodu (np. "Wkręt do drewna stożkowy", "Kod odbioru", "Etykieta towarowa"). Jeśli brak nazwy, wpisz typ etykiety.
-- "dimension": Wymiar lub rozmiar produktu (np. "4x40 mm", "M6x50", "8x80", "5x60 mm") lub pusty ciąg "" jeśli brak.
-- "scaleCode": Kod wagi do wpisania na wadze sklepowej (zwykle wyróżniona liczba 2- lub 3-cyfrowa np. "247", "185", "42") LUB kod PIN (np. "4757").
-- "refNumber": Numer referencyjny LM / kod kreskowy / numer kodu (np. "42660256", "7000055492487490").
-- "priceText": Cena za sztukę lub kilogram (np. "29,90 zł/kg", "0,45 zł/szt") lub domyślnie "Cena".
+2. NUMER REFERENCYJNY (refNumber):
+   - NAJWYŻSZY PRIORYTET: 8-cyfrowy numer referencyjny artykułu (np. "44813216", "99146892", "42660255"). Na wyświetlaczu ESL znajduje się pod rozmiarem i nad słowem ZAPAS.
+   - DRUGI PRIORYTET (jeśli brak 8-cyfrowego ref): 13-cyfrowy kod EAN (np. "5901171215598") przy poziomym kodzie kreskowym na dole wyświetlacza (usuń przyrostki tekstowe jak APS).
+   - Wartość refNumber musi zawierać tylko czyste cyfry.
 
-Zwróć poprawną tablicę JSON.`;
+3. KOD WAGI / NUMER NA WADZE (scaleCode):
+   - ZAWSZE go odczytaj! To liczba 2- lub 3-cyfrowa (np. "169", "246", "980", "170").
+   - ZWYKLE znajduje się NA SAMYM POCZĄTKU pierwszej linijki tekstu przed nazwą (np. z "169 WKRĘT UNIWERSALNY" kod wagi to "169").
+   - Może być też w osobnym polu lub wyróżniony dużą czcionką.
+
+4. NAZWA ARTYKUŁU (name):
+   - Nazwa towaru bez kodu wagi z początku (np. z "169 WKRĘT UNIWERSALNY" wyodrębnij "Wkręt uniwersalny").
+
+5. ROZMIAR / WYMIAR (dimension):
+   - Wymiar produktu (np. "6x90 mm", "5x70 mm", "4x12 mm", "4.5x50 mm", "M6x50"). Zawsze dodaj "mm".
+
+6. CENA (priceText):
+   - Cena z jednostką (np. "38,49 zł/kg", "4,98 zł/kg" lub domyślnie "Cena").
+
+7. WIELE POZYCJI:
+   - Skup się na głównej etykiecie na pierwszym planie (ignoruj rozmyte półki w tle). Jeśli w kadrze jest listwa z kilkoma ostrymi etykietami, zwróć je po kolei.`;
 
     const modelConfig = {
       systemInstruction:
-        'Zwracaj wyłącznie poprawny obiekt JSON zawierający tablicę etykiet. Jeśli to kod kreskowy lub bilet, wypełnij pola refNumber oraz scaleCode.',
+        'Zwracaj wyłącznie tablicę JSON z odczytanymi danymi etykiet. Ignoruj pionowe kody seryjne ESL. Preferuj 8-cyfrowy numer referencyjny artykułu, a w razie braku kod EAN-13.',
       responseMimeType: 'application/json',
       responseSchema: {
         type: Type.ARRAY,
@@ -69,35 +82,35 @@ Zwróć poprawną tablicę JSON.`;
           properties: {
             name: {
               type: Type.STRING,
-              description: 'Nazwa artykułu lub opis kodu',
+              description: 'Nazwa artykułu bez numeru wagi z początku',
             },
             dimension: {
               type: Type.STRING,
-              description: 'Wymiar produktu (np. 4x40 mm) lub puste',
+              description: 'Wymiar produktu z mm (np. 6x90 mm)',
             },
             scaleCode: {
               type: Type.STRING,
-              description: 'Kod wagi (np. 247) lub kod PIN',
+              description: '2- lub 3-cyfrowy kod wagi wpisywany na wadze (np. 169)',
             },
             refNumber: {
               type: Type.STRING,
-              description: 'Numer referencyjny LM lub kod kreskowy',
+              description: '8-cyfrowy numer referencyjny produktu LM lub kod EAN-13',
             },
             priceText: {
               type: Type.STRING,
-              description: 'Cena lub etykieta ceny',
+              description: 'Cena z etykiety (np. 38,49 zł/kg)',
             },
           },
-          required: ['name'],
+          required: ['name', 'scaleCode'],
         },
       },
     };
 
     let response;
     try {
-      // Primary: gemini-3.1-flash-lite (fast, high throughput, low latency)
+      // Primary: gemini-flash-latest
       response = await ai.models.generateContent({
-        model: 'gemini-3.1-flash-lite',
+        model: 'gemini-flash-latest',
         contents: {
           parts: [
             {
@@ -114,9 +127,9 @@ Zwróć poprawną tablicę JSON.`;
         config: modelConfig,
       });
     } catch (err: any) {
-      console.warn('Fallback to gemini-3.5-flash-lite due to error:', err?.message);
+      console.warn('Fallback do gemini-3.1-flash-lite:', err?.message);
       response = await ai.models.generateContent({
-        model: 'gemini-3.5-flash-lite',
+        model: 'gemini-3.1-flash-lite',
         contents: {
           parts: [
             {

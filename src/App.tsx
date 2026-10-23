@@ -375,13 +375,18 @@ export default function App() {
   // Zastosowanie etykiet rozpoznanych ze skanera ESL
   const handleApplyEslItems = (
     scannedItems: FiszkaItem[],
-    target: 'appendSlots' | 'activePage' | 'newPage' | 'replaceAll' = 'appendSlots'
+    target: 'appendSlots' | 'activePage' | 'newPage' | 'replaceAll' = 'replaceAll'
   ) => {
     if (scannedItems.length === 0) return;
 
     if (target === 'replaceAll') {
+      // Idealnie dopasowana liczba stron A4 (np. 8 fiszek = dokładnie 2 strony: 7 na str. 1, 1 na str. 2)
       const needed = Math.max(7, Math.ceil(scannedItems.length / 7) * 7);
-      const padded = [...scannedItems];
+      const padded: FiszkaItem[] = scannedItems.map((si, idx) => ({
+        ...si,
+        id: `fiszka_esl_${Date.now()}_${idx}`,
+      }));
+
       while (padded.length < needed) {
         padded.push({
           id: `fiszka_pad_${Date.now()}_${padded.length}`,
@@ -397,7 +402,11 @@ export default function App() {
       scrollToPage(0);
     } else if (target === 'newPage') {
       const needed = Math.max(7, Math.ceil(scannedItems.length / 7) * 7);
-      const padded = [...scannedItems];
+      const padded: FiszkaItem[] = scannedItems.map((si, idx) => ({
+        ...si,
+        id: `fiszka_esl_${Date.now()}_${idx}`,
+      }));
+
       while (padded.length < needed) {
         padded.push({
           id: `fiszka_pad_${Date.now()}_${padded.length}`,
@@ -414,29 +423,36 @@ export default function App() {
         scrollToPage(newPageIdx);
       }, 100);
     } else if (target === 'appendSlots') {
-      // Domyślny i najwygodniejszy tryb:
-      // Szukamy kolejnych wolnych fiszek (pusty wymiar i brak nr ref) na aktywnej stronie
+      // Wypełnia kolejne wolne fiszki (lub zastępuje domyślny wzorzec, jeśli nie był edytowany)
       setItems((prev) => {
-        const next = [...prev];
+        let next = [...prev];
         const pageStart = activePage * 7;
         const pageEnd = pageStart + 7;
 
-        // Szukamy pierwszego wolnego miejsca na aktywnej stronie
+        // Jeśli lista to domyślny wzorzec z kodami 241-247, wstawiamy od 1. fiszki!
+        const isDefaultDemo =
+          next.length === 7 &&
+          next[0].scaleCode === '247' &&
+          next[1].scaleCode === '246' &&
+          next[6].scaleCode === '241';
+
         let currentSlot = -1;
-        for (let i = pageStart; i < Math.min(pageEnd, next.length); i++) {
-          if (!next[i].dimension?.trim() && !next[i].refNumber?.trim()) {
-            currentSlot = i;
-            break;
+        if (isDefaultDemo && activePage === 0) {
+          currentSlot = 0;
+        } else {
+          // Szukamy pierwszego wolnego miejsca na aktywnej stronie
+          for (let i = pageStart; i < Math.min(pageEnd, next.length); i++) {
+            if (!next[i].dimension?.trim() && !next[i].refNumber?.trim()) {
+              currentSlot = i;
+              break;
+            }
+          }
+          if (currentSlot === -1) {
+            currentSlot = pageEnd;
           }
         }
 
-        // Jeśli wszystkie 7 fiszek na bieżącej stronie są już zajęte, wstawiamy od kolejnej pozycji
-        if (currentSlot === -1) {
-          currentSlot = pageEnd;
-        }
-
         scannedItems.forEach((si) => {
-          // Upewniamy się, że tablica ma wystarczającą liczbę stron (wielokrotność 7)
           while (currentSlot >= next.length) {
             const pageToAdd = Array.from({ length: 7 }, (_, idx) => ({
               id: `fiszka_ext_${Date.now()}_${next.length + idx}`,
@@ -460,6 +476,18 @@ export default function App() {
           currentSlot++;
         });
 
+        // Usuń nadmiarowe, puste strony z końca
+        const minNeeded = Math.max(7, Math.ceil(currentSlot / 7) * 7);
+        while (next.length > minNeeded) {
+          const lastSeven = next.slice(next.length - 7);
+          const hasData = lastSeven.some((it) => it.dimension?.trim() || it.refNumber?.trim());
+          if (!hasData) {
+            next = next.slice(0, next.length - 7);
+          } else {
+            break;
+          }
+        }
+
         return next;
       });
       setTimeout(() => {
@@ -469,7 +497,7 @@ export default function App() {
       // 'activePage': Wstaw od pozycji 1 na aktywnej stronie
       const startIdx = activePage * 7;
       setItems((prev) => {
-        const next = [...prev];
+        let next = [...prev];
         scannedItems.forEach((si, i) => {
           const targetIdx = startIdx + i;
           while (targetIdx >= next.length) {
@@ -493,6 +521,19 @@ export default function App() {
             priceText: si.priceText || 'Cena',
           };
         });
+
+        // Usuń całkowicie puste strony na końcu (np. pozostałe po poprzednich operacjach)
+        const minNeeded = Math.max(7, Math.ceil((startIdx + scannedItems.length) / 7) * 7);
+        while (next.length > minNeeded) {
+          const lastSeven = next.slice(next.length - 7);
+          const hasData = lastSeven.some((it) => it.dimension?.trim() || it.refNumber?.trim());
+          if (!hasData) {
+            next = next.slice(0, next.length - 7);
+          } else {
+            break;
+          }
+        }
+
         return next;
       });
       setTimeout(() => {

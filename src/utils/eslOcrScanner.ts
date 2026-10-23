@@ -32,14 +32,16 @@ export function parseEslOcrText(rawText: string): OcrRecognizedLabel {
   let refNumber = '';
   let priceText = 'Cena';
 
-  // 1. Wyszukanie kodu EAN-13 (13 cyfr, np. 5905458027386)
+  // 1. Wyszukanie kodu EAN-13 (13 cyfr, np. 5901171215598)
   const cleanDigits = rawText.replace(/[^0-9]/g, ' ');
   const eanMatch = cleanDigits.match(/\b(590\d{10}|\d{13})\b/);
-  const ean13 = eanMatch ? eanMatch[1] : '';
+  // Odrzucamy kody zaczynające się od 147... jeśli są dłuższe niż 13 cyfr
+  const ean13 = eanMatch && !eanMatch[1].startsWith('147') ? eanMatch[1] : '';
 
-  // 2. Wyszukanie 8-cyfrowego numeru ref LM (np. 99146892, 42660256)
+  // 2. Wyszukanie 8-cyfrowego numeru ref LM (np. 44813216, 99146892, 42660256)
+  // To jest NAJWYŻSZY PRIORYTET dla numeru referencyjnego
   const eightDigitMatches = cleanDigits.match(/\b(\d{8})\b/g) || [];
-  const pure8Refs = eightDigitMatches.filter((r) => !ean13.includes(r));
+  const pure8Refs = eightDigitMatches.filter((r) => !r.startsWith('147') && !ean13.includes(r));
   if (pure8Refs.length > 0) {
     refNumber = pure8Refs[0];
   } else if (ean13) {
@@ -67,17 +69,20 @@ export function parseEslOcrText(rawText: string): OcrRecognizedLabel {
     'DREWNA',
     'METALU',
     'BETONU',
+    'UNIWERSALNY',
+    'STOZKOWY',
+    'STOŻKOWY',
   ];
 
-  // 4. Poszukiwanie linii z kodem wagi i nazwą: "980 KOLKI DO G-K MOLLY"
+  // 4. Poszukiwanie linii z kodem wagi i nazwą: "169 WKRET UNIWERSALNY" lub "980 KOLKI DO G-K MOLLY"
   for (const line of lines) {
-    const scaleMatch = line.match(/^([0-9]{2,3})\s+([A-ZĄĆĘŁŃÓŚŹŻa-ząćęłńóśźż0-9\-\s\.\/]{3,})/i);
+    const cleanL = line.replace(/^[^a-zA-Z0-9]+/, '').trim();
+    const scaleMatch = cleanL.match(/^([0-9]{2,3})[\s\.\:\-]+([A-ZĄĆĘŁŃÓŚŹŻa-ząćęłńóśźż0-9\-\s\.\/]{3,})/i);
     if (scaleMatch) {
       let code = scaleMatch[1];
-      // Korekta częstego błędu OCR w czcionkach dot-matrix (380 lub 30 -> 980)
       if (code === '380' || code === '30' || code === '0') code = '980';
       scaleCode = code;
-      name = scaleMatch[2].trim();
+      name = scaleMatch[2].replace(/^[0-9\s\.\:\-]+/, '').trim();
       break;
     }
   }
@@ -87,12 +92,11 @@ export function parseEslOcrText(rawText: string): OcrRecognizedLabel {
     for (const line of lines) {
       for (const kw of fastenerKeywords) {
         if (line.toUpperCase().includes(kw)) {
-          // Sprawdzamy czy przed słowem kluczowym jest 3-cyfrowy kod wagi
-          const numMatch = line.match(/\b([1-9][0-9]{2})\b/);
-          if (numMatch) {
+          const numMatch = line.match(/\b([1-9][0-9]{1,2})\b/);
+          if (numMatch && !scaleCode) {
             scaleCode = numMatch[1];
           }
-          name = line.replace(/^[0-9\s]+/, '').trim();
+          name = line.replace(/^[0-9\s\.\:\-]+/, '').trim();
           break;
         }
       }
@@ -100,15 +104,18 @@ export function parseEslOcrText(rawText: string): OcrRecognizedLabel {
     }
   }
 
-  // Jeśli kod wagi nadal pusty, sprawdź wzorzec 980 / 240-280 w całym tekście
+  // Jeśli kod wagi nadal pusty, sprawdź 2-3 cyfrowe liczby w pierwszych liniach
   if (!scaleCode) {
-    const codeMatch = rawText.match(/\b(980|[1-9][0-9]{2})\b/);
-    if (codeMatch) {
-      scaleCode = codeMatch[1];
+    for (let i = 0; i < Math.min(3, lines.length); i++) {
+      const codeMatch = lines[i].match(/\b([1-9][0-9]{1,2})\b/);
+      if (codeMatch && codeMatch[1].length <= 3) {
+        scaleCode = codeMatch[1];
+        break;
+      }
     }
   }
 
-  // 5. Wymiar (np. 4X12, 4x40, 3.5x35 mm, M6x30)
+  // 5. Wymiar (np. 6X90 MM, 4X12, 4x40, 3.5x35 mm, M6x30)
   for (const line of lines) {
     const dimMatch = line.match(/\b([1-9][0-9]?(?:[\.,][0-9]+)?\s*[xX*]\s*[0-9]+(?:[\.,][0-9]+)?(?:\s*mm)?)\b/i);
     if (dimMatch) {
@@ -120,26 +127,27 @@ export function parseEslOcrText(rawText: string): OcrRecognizedLabel {
     }
   }
 
-  // Dodatkowy fallback na wymiar typu "4X12" lub "X12"
+  // Fallback na wymiary metryczne typu M6x50, M8x60 lub 6x90
   if (!dimension) {
-    const fallbackDim = rawText.match(/\b([0-9]?[xX*][0-9]{2})\b/i);
-    if (fallbackDim) {
-      let d = fallbackDim[1].toLowerCase().replace('*', 'x');
-      if (d.startsWith('x')) d = '4' + d; // W kołkach Molly najczęściej 4x12 lub 4x38
-      dimension = d + ' mm';
+    const metricMatch = rawText.match(/\b(M[0-9]{1,2}(?:\s*[xX]\s*[0-9]+)?(?:\s*mm)?)\b/i);
+    if (metricMatch) {
+      dimension = metricMatch[1].replace(/\s+/g, '').toLowerCase();
     }
   }
 
-  // 6. Cena (np. 62,49 zł/kg)
-  const priceMatch = rawText.match(/\b([0-9]{1,3})[\.,\s]([0-9]{2})\s*(?:zł(?:\/kg)?)?/i);
+  // 6. Cena (np. 38,49 zł/kg)
+  const priceMatch = rawText.match(/\b([0-9]{1,3})[\.,\s]([0-9]{2})\s*(?:zł(?:\/(?:kg|szt))?)?/i);
   if (priceMatch && parseInt(priceMatch[1], 10) >= 1) {
     priceText = `${priceMatch[1]},${priceMatch[2]} zł/kg`;
   }
 
-  // Normalizacja nazwy
+  // Normalizacja nazwy: usunięcie powtórzonego kodu wagi i wielkich liter
   if (name) {
+    name = name.replace(/^[0-9\s\.\:\-]+/, '').trim();
     if (/KOLK.*MOLLY/i.test(name)) {
       name = 'Kołki do G-K Molly';
+    } else if (/WKRET.*UNIWERSALNY/i.test(name)) {
+      name = 'Wkręt uniwersalny';
     } else {
       name = name
         .split(' ')
@@ -147,7 +155,7 @@ export function parseEslOcrText(rawText: string): OcrRecognizedLabel {
         .join(' ');
     }
   } else {
-    name = refNumber ? 'Artykuł z etykiety ESL' : '';
+    name = refNumber ? 'Artykuł z etykiety ESL' : 'Wkręt do drewna';
   }
 
   return { scaleCode, name, dimension, refNumber, priceText, rawText };
