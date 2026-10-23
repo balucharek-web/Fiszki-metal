@@ -46,20 +46,10 @@ export const FiszkaCard: React.FC<FiszkaCardProps> = ({
     }
   };
 
-  // Determine border style for cutting guides
-  let borderClass = 'border border-slate-300';
-  if (!settings.showCuttingGuides || settings.cuttingGuideStyle === 'none') {
-    borderClass = isPrintMode ? 'border border-transparent' : 'border border-dashed border-slate-200';
-  } else if (settings.cuttingGuideStyle === 'dashed') {
-    borderClass = 'border border-dashed border-slate-400';
-  } else {
-    borderClass = 'border border-slate-300';
-  }
-
   return (
     <div
       onClick={onSelect}
-      className={`relative box-border bg-white flex items-center overflow-hidden text-black ${borderClass} ${
+      className={`relative box-border bg-white flex items-center overflow-hidden text-black border border-slate-300 ${
         !isPrintMode ? 'transition-all hover:border-slate-400 group' : ''
       }`}
       style={{

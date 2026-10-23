@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react';
-import { FiszkaItem, SheetSettings, CuttingGuideStyle } from './types/label';
+import { FiszkaItem, SheetSettings } from './types/label';
 import { A4PrintSheet } from './components/A4PrintSheet';
 import { ExcelImportModal } from './components/ExcelImportModal';
 import { DimensionSeriesModal } from './components/DimensionSeriesModal';
@@ -24,9 +24,7 @@ import {
   Sparkles,
   FileSpreadsheet,
   Ruler,
-  Scissors,
-  Sliders,
-  Check,
+  ChevronDown,
 } from 'lucide-react';
 import { generateFillablePdf, downloadBlob } from './utils/pdfGenerator';
 
@@ -104,7 +102,7 @@ export default function App() {
   });
 
   const [settings, setSettings] = useState<SheetSettings>(() => {
-    const saved = localStorage.getItem('standers_sheet_settings_v2');
+    const saved = localStorage.getItem('standers_sheet_settings_v3');
     if (saved) {
       try {
         return JSON.parse(saved);
@@ -122,17 +120,20 @@ export default function App() {
       useStandersLogo: true,
       scaleLabelText: 'Wpisz na wadze:',
       badgeColor: '#d7f5c5',
-      includeCalibrationRuler: true,
+      includeCalibrationRuler: false, // Domyślnie wyłączona linijka, żeby arkusz był w 100% czysty
       verticalSpacingMm: 0,
     };
   });
 
   const [autoFit, setAutoFit] = useState(true);
-  const [zoomScale, setZoomScale] = useState(0.78);
+  const [zoomScale, setZoomScale] = useState(0.72);
   const [activePage, setActivePage] = useState(0);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
-  // Modals for Option C (Smart Batch / Mass Tools)
+  // Zwijane menu narzędzi seryjnych
+  const [isBatchMenuOpen, setIsBatchMenuOpen] = useState(false);
+
+  // Modale dla narzędzi masowych
   const [isExcelModalOpen, setIsExcelModalOpen] = useState(false);
   const [isSeriesModalOpen, setIsSeriesModalOpen] = useState(false);
 
@@ -145,29 +146,28 @@ export default function App() {
 
   // Sync settings to local storage
   useEffect(() => {
-    localStorage.setItem('standers_sheet_settings_v2', JSON.stringify(settings));
+    localStorage.setItem('standers_sheet_settings_v3', JSON.stringify(settings));
   }, [settings]);
 
-  // Calculate zoom scale to fit entire A4 height cleanly on screen without vertical clipping
+  // Obliczenie skali, aby arkusz A4 idealnie mieścił się w oknie bez przewijania
   const calculateFitScale = () => {
-    if (typeof window === 'undefined') return 0.78;
-    // Standard A4 at 96 DPI: 794px width x 1123px height
+    if (typeof window === 'undefined') return 0.72;
+    // Format A4 przy 96 DPI: 794px szerokości x 1123px wysokości
     const a4Height = 1123;
     const a4Width = 794;
-    // Available height: viewport height minus top & bottom padding (approx 48px)
-    const availableHeight = Math.max(300, window.innerHeight - 48);
-    // Available width: viewport width minus sidebar width (approx 320px on desktop)
+    // Odliczamy nagłówek strony (~38px), paddingi py-4 (32px), bufor bezpieczeństwa (35px) = ~105px
+    const availableHeight = Math.max(300, window.innerHeight - 105);
     const isDesktop = window.innerWidth >= 768;
-    const sidebarWidth = isDesktop ? 330 : 0;
+    const sidebarWidth = isDesktop ? 335 : 0;
     const availableWidth = Math.max(300, window.innerWidth - sidebarWidth - 48);
 
     const scaleByH = availableHeight / a4Height;
     const scaleByW = availableWidth / a4Width;
-    const fit = Math.min(scaleByH, scaleByW, 1.05);
+    const fit = Math.min(scaleByH, scaleByW, 1.0);
     return Math.max(0.35, Math.round(fit * 100) / 100);
   };
 
-  // Re-calculate auto-fit on window resize
+  // Dopasowanie do okna przy zmianie rozmiaru ekranu
   useEffect(() => {
     const handleResize = () => {
       if (autoFit) {
@@ -179,13 +179,23 @@ export default function App() {
     return () => window.removeEventListener('resize', handleResize);
   }, [autoFit]);
 
+  // Obsługa powiększania/pomniejszania kółkiem myszy z wciśniętym klawiszem Ctrl
+  const handleWheel = (e: React.WheelEvent) => {
+    if (e.ctrlKey) {
+      e.preventDefault();
+      setAutoFit(false);
+      const delta = e.deltaY < 0 ? 0.05 : -0.05;
+      setZoomScale((z) => Math.max(0.35, Math.min(1.5, Math.round((z + delta) * 100) / 100)));
+    }
+  };
+
   const handleUpdateItem = (id: string, updated: Partial<FiszkaItem>) => {
     setItems((prev) =>
       prev.map((it) => (it.id === id ? { ...it, ...updated } : it))
     );
   };
 
-  // Quick action: Duplicate first card of a specific page to all 7 cards of that page
+  // Powielenie pierwszej fiszki na pozostałe na danej stronie z inkrementacją kodu wagi (+1)
   const handleDuplicateFirstToPage = (pageIdx: number) => {
     const startIdx = pageIdx * 7;
     const templateItem = items[startIdx];
@@ -213,13 +223,13 @@ export default function App() {
     });
   };
 
-  // Quick action: Copy name of first label to ALL labels across all pages
+  // Kopiowanie nazwy pierwszej fiszki do wszystkich
   const handleCopyFirstNameToAll = () => {
     const firstName = items[0]?.name || 'Wkręt do drewna';
     setItems((prev) => prev.map((it) => ({ ...it, name: firstName })));
   };
 
-  // Quick action: Renumber scale codes sequentially (+1) across ALL labels
+  // Numerowanie wag kolejno (+1)
   const handleRenumberCodes = () => {
     const startCode = parseInt(items[0]?.scaleCode) || 240;
     setItems((prev) =>
@@ -227,7 +237,7 @@ export default function App() {
     );
   };
 
-  // Add a new A4 page (7 new labels)
+  // Dodanie nowej strony A4 (7 nowych fiszek)
   const handleAddPage = () => {
     const lastItem = items[items.length - 1];
     const lastCode = parseInt(lastItem?.scaleCode) || (240 + items.length - 1);
@@ -246,7 +256,7 @@ export default function App() {
     }, 100);
   };
 
-  // Remove a specific page
+  // Usunięcie strony
   const handleRemovePage = (pageIdx: number) => {
     if (totalPages <= 1) return;
     if (window.confirm(`Czy na pewno chcesz usunąć stronę ${pageIdx + 1}?`)) {
@@ -258,7 +268,7 @@ export default function App() {
     }
   };
 
-  // Clear fields on a specific page
+  // Wyczyszczenie pól na stronie
   const handleClearPage = (pageIdx: number) => {
     if (window.confirm(`Wyczyścić wymiary i kody na stronie ${pageIdx + 1}?`)) {
       setItems((prev) =>
@@ -277,14 +287,14 @@ export default function App() {
     }
   };
 
-  // Reset to initial clean 7 labels
+  // Reset do 1 domyślnej strony
   const handleReset = () => {
     if (window.confirm('Czy chcesz zresetować wszystkie fiszki do wzorca początkowego (1 strona)?')) {
       setItems(INITIAL_LABELS_7);
     }
   };
 
-  // Handler for Excel / Clipboard batch import (Option C)
+  // Import z Excela
   const handleImportFromExcel = (newFiszki: FiszkaItem[], mode: 'replace' | 'append') => {
     if (mode === 'replace') {
       setItems(newFiszki);
@@ -294,7 +304,7 @@ export default function App() {
     }
   };
 
-  // Handler for Dimension Series Generator (Option C)
+  // Zastosowanie serii wymiarów
   const handleApplySeries = (
     seriesItems: FiszkaItem[],
     target: 'activePage' | 'newPage' | 'replaceAll'
@@ -309,7 +319,6 @@ export default function App() {
         scrollToPage(newPageIdx);
       }, 100);
     } else {
-      // activePage
       const startIdx = activePage * 7;
       setItems((prev) => {
         const next = [...prev];
@@ -331,31 +340,36 @@ export default function App() {
     }
   };
 
-  // Download clean PDF template without pre-filled text
-  const handleDownloadPdf = async (empty = true) => {
+  // Generowanie i pobranie PDF z aktualnymi danymi lub czystego
+  const handleDownloadFilledPdf = async (empty = false) => {
     try {
       setIsGeneratingPdf(true);
-      const itemsToExport = Array.from({ length: 7 }, (_, i) => ({
-        id: `empty_${i + 1}`,
-        name: '',
-        dimension: '',
-        scaleCode: '',
-        refNumber: '',
-        priceText: 'Cena',
-      }));
+      const itemsToExport = empty
+        ? Array.from({ length: 7 }, (_, i) => ({
+            id: `empty_${i + 1}`,
+            name: '',
+            dimension: '',
+            scaleCode: '',
+            refNumber: '',
+            priceText: 'Cena',
+          }))
+        : items;
+
       const pdfBytes = await generateFillablePdf(itemsToExport, 7);
-      downloadBlob(pdfBytes, 'szablon_fiszek_7_pusty_a4.pdf');
+      const filename = empty
+        ? 'szablon_fiszek_7_pusty_a4.pdf'
+        : `fiszki_standers_${totalPages}_stron_${Date.now()}.pdf`;
+      downloadBlob(pdfBytes, filename);
     } catch (err) {
-      console.error('PDF generation error, downloading fallback:', err);
-      const link = document.createElement('a');
-      link.href = './szablon_fiszek_7_pusty_a4.pdf';
-      link.download = 'szablon_fiszek_7_pusty_a4.pdf';
-      link.click();
+      console.error('Błąd generowania PDF:', err);
+      // fallback
+      window.print();
     } finally {
       setIsGeneratingPdf(false);
     }
   };
 
+  // Druk bezpośredni z przeglądarki (z marginesem 8.5mm w CSS)
   const handlePrint = () => {
     window.print();
   };
@@ -371,12 +385,15 @@ export default function App() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-200/90 flex flex-col md:flex-row select-text font-sans">
-      {/* LEFT SIDEBAR CONTROLS (Hidden during printing) */}
-      <aside className="no-print w-full md:w-82 shrink-0 bg-white border-r border-slate-300 md:h-screen md:sticky md:top-0 flex flex-col justify-between shadow-xl z-30 overflow-y-auto">
-        <div className="p-4 flex flex-col gap-4">
+    <div
+      className="min-h-screen bg-slate-200/90 flex flex-col md:flex-row select-text font-sans"
+      onWheel={handleWheel}
+    >
+      {/* LEWY PANEL KONTROLNY (Ukryty podczas druku) */}
+      <aside className="no-print w-full md:w-84 shrink-0 bg-white border-r border-slate-300 md:h-screen md:sticky md:top-0 flex flex-col justify-between shadow-xl z-30 overflow-y-auto">
+        <div className="p-4 flex flex-col gap-3.5">
           {/* Header & Logo */}
-          <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+          <div className="flex items-center justify-between border-b border-slate-200 pb-2.5">
             <div className="flex items-center gap-2">
               <img
                 src="./assets/standers_logo_clean.png"
@@ -390,32 +407,45 @@ export default function App() {
             </span>
           </div>
 
-          {/* Primary Action Buttons: Print & Blank PDF */}
+          {/* GŁÓWNE PRZYCISKI DRUKU / PDF */}
           <div className="flex flex-col gap-2">
+            {/* Opcja 1: Pobierz idealny PDF z wpisanymi danymi (brak problemu z obcinaniem fiszek przez drukarki!) */}
             <button
-              onClick={handlePrint}
-              className="w-full py-2.5 px-4 text-sm font-bold text-white bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] rounded-xl flex items-center justify-center gap-2 shadow-md transition-all cursor-pointer"
-              title="Drukuj lub zapisz jako PDF wszystkie strony arkusza"
+              onClick={() => handleDownloadFilledPdf(false)}
+              disabled={isGeneratingPdf}
+              className="w-full py-2.5 px-3 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-700 active:scale-[0.99] rounded-xl flex items-center justify-center gap-2 shadow-sm transition-all cursor-pointer"
+              title="Generuje idealny wektorowy plik PDF z zachowaniem 8.5mm marginesów - drukarka nigdy nie obetnie fiszek!"
             >
-              <Printer className="w-4 h-4" />
+              <FileDown className="w-4 h-4" />
               <span>
-                Drukuj A4 ({totalPages}{' '}
-                {totalPages === 1 ? 'strona' : totalPages < 5 ? 'strony' : 'stron'})
+                {isGeneratingPdf
+                  ? 'Generowanie PDF...'
+                  : `Pobierz gotowy PDF (${totalPages} ${totalPages === 1 ? 'strona' : 'strony'})`}
               </span>
             </button>
 
+            {/* Opcja 2: Drukuj bezpośrednio ze strony (z bezpiecznym marginesem 8.5mm) */}
             <button
-              onClick={() => handleDownloadPdf(true)}
-              disabled={isGeneratingPdf}
-              className="w-full py-1.5 px-3 text-xs font-semibold text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-300 rounded-lg flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-              title="Pobierz czysty szablon PDF gotowy do wpisywania"
+              onClick={handlePrint}
+              className="w-full py-2 px-3 text-xs font-semibold text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-300 rounded-xl flex items-center justify-center gap-2 transition-colors cursor-pointer"
+              title="Drukuj bezpośrednio z przeglądarki (margines 8.5mm zapobiega obcinaniu)"
             >
-              <FileDown className="w-3.5 h-3.5 text-slate-500" />
-              <span>{isGeneratingPdf ? 'Generowanie...' : 'Pobierz czysty szablon PDF'}</span>
+              <Printer className="w-4 h-4 text-slate-600" />
+              <span>Drukuj stronę (Ctrl+P)</span>
+            </button>
+
+            {/* Opcja 3: Czysty szablon PDF */}
+            <button
+              onClick={() => handleDownloadFilledPdf(true)}
+              disabled={isGeneratingPdf}
+              className="w-full py-1.5 px-3 text-[11px] font-medium text-slate-500 hover:text-slate-800 hover:bg-slate-50 rounded-lg flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+              title="Pobierz pusty szablon PDF do odręcznego pisania lub w programie PDF"
+            >
+              <span>Pobierz czysty szablon PDF</span>
             </button>
           </div>
 
-          {/* Stats Bar */}
+          {/* Pasek statusu */}
           <div className="flex items-center justify-between bg-slate-50 border border-slate-200 rounded-lg px-3 py-1.5 text-xs text-slate-600">
             <span>
               Łącznie fiszek: <strong className="text-slate-900">{items.length}</strong>
@@ -426,226 +456,130 @@ export default function App() {
           </div>
 
           {/* ========================================================================= */}
-          {/* OPTION C: NARZĘDZIA MASOWE / SERYJNE (Super wygoda na PC) */}
+          {/* NARZĘDZIA SERYJNE - ZWINIĘTE W JEDNĄ OPCJĘ MENU (Zgodnie z życzeniem) */}
           {/* ========================================================================= */}
-          <div className="flex flex-col gap-2 border-t border-slate-200 pt-3">
-            <div className="flex items-center justify-between text-xs font-bold text-slate-800">
-              <span className="flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-purple-600" />
-                Narzędzia seryjne (masowe)
-              </span>
-              <span className="text-[10px] font-semibold text-purple-700 bg-purple-50 border border-purple-200 px-1.5 py-0.2 rounded">
-                PC
-              </span>
-            </div>
-
-            <div className="grid grid-cols-1 gap-1.5">
-              {/* Button 1: Paste from Excel / Clipboard */}
-              <button
-                onClick={() => setIsExcelModalOpen(true)}
-                className="w-full px-3 py-2 text-xs font-bold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 hover:border-emerald-300 rounded-xl border border-emerald-200 flex items-center justify-between transition-all cursor-pointer group shadow-2xs"
-                title="Wklej tabelę skopiowaną ze schowka lub Excela (Nazwa, Wymiar, Kod wagi, Ref)"
-              >
-                <div className="flex items-center gap-2">
-                  <FileSpreadsheet className="w-4 h-4 text-emerald-600 group-hover:scale-110 transition-transform" />
-                  <span>Wklej z Excela / Schowka</span>
-                </div>
-                <span className="text-[10px] bg-white text-emerald-700 px-1.5 py-0.5 rounded border border-emerald-200">
-                  Ctrl+V
+          <div className="border border-purple-200/80 rounded-xl overflow-hidden bg-purple-50/20 shadow-2xs">
+            <button
+              type="button"
+              onClick={() => setIsBatchMenuOpen(!isBatchMenuOpen)}
+              className="w-full px-3 py-2 text-xs font-bold text-purple-900 bg-purple-50/70 hover:bg-purple-100/60 flex items-center justify-between transition-colors cursor-pointer"
+              title="Kliknij, aby rozwinąć lub zwinąć narzędzia seryjne (Excel, Serie, Powielanie)"
+            >
+              <div className="flex items-center gap-2">
+                <Sparkles className="w-4 h-4 text-purple-600" />
+                <span>Narzędzia seryjne (masowe)</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="text-[10px] font-semibold text-purple-700 bg-white px-1.5 py-0.2 rounded border border-purple-200">
+                  {isBatchMenuOpen ? 'Zwiń' : 'Rozwiń'}
                 </span>
-              </button>
-
-              {/* Button 2: Dimension Series Generator */}
-              <button
-                onClick={() => setIsSeriesModalOpen(true)}
-                className="w-full px-3 py-2 text-xs font-bold text-purple-800 bg-purple-50 hover:bg-purple-100 hover:border-purple-300 rounded-xl border border-purple-200 flex items-center justify-between transition-all cursor-pointer group shadow-2xs"
-                title="Szybki generator serii wymiarów (np. wkręty 3.5 - 6 mm od 25 do 80 mm)"
-              >
-                <div className="flex items-center gap-2">
-                  <Sparkles className="w-4 h-4 text-purple-600 group-hover:scale-110 transition-transform" />
-                  <span>Generator serii wymiarów</span>
-                </div>
-                <span className="text-[10px] bg-white text-purple-700 px-1.5 py-0.5 rounded border border-purple-200">
-                  Auto
-                </span>
-              </button>
-
-              {/* Button 3: Quick duplicate to active page */}
-              <button
-                onClick={() => handleDuplicateFirstToPage(activePage)}
-                className="w-full px-3 py-2 text-xs font-medium text-slate-700 bg-slate-50 hover:bg-slate-100 hover:text-slate-900 rounded-lg border border-slate-200 flex items-center gap-2 transition-colors cursor-pointer"
-                title={`Kopiuje fiszkę #${activePage * 7 + 1} na całą stronę ${activePage + 1} z inkrementacją kodu wagi (+1)`}
-              >
-                <Copy className="w-3.5 h-3.5 text-slate-500" />
-                <span>Powiel #1 na stronę {activePage + 1} (+1)</span>
-              </button>
-
-              {/* Button 4: Copy first name to all */}
-              <button
-                onClick={handleCopyFirstNameToAll}
-                className="w-full px-3 py-1.5 text-[11px] font-medium text-slate-600 hover:text-slate-800 bg-white hover:bg-slate-50 rounded-lg border border-slate-200 flex items-center gap-2 transition-colors cursor-pointer"
-                title="Kopiuje nazwę z pierwszej fiszki do wszystkich fiszek"
-              >
-                <Layers className="w-3.5 h-3.5 text-slate-400" />
-                <span>Kopiuj nazwę do wszystkich fiszek</span>
-              </button>
-
-              {/* Button 5: Renumber codes sequentially */}
-              <button
-                onClick={handleRenumberCodes}
-                className="w-full px-3 py-1.5 text-[11px] font-medium text-slate-600 hover:text-slate-800 bg-white hover:bg-slate-50 rounded-lg border border-slate-200 flex items-center gap-2 transition-colors cursor-pointer"
-                title="Automatycznie numeruje kody wagi po kolei (+1 od pierwszej fiszki)"
-              >
-                <Hash className="w-3.5 h-3.5 text-slate-400" />
-                <span>Numeruj wagę po kolei (+1)</span>
-              </button>
-            </div>
-          </div>
-
-          {/* ========================================================================= */}
-          {/* OPTION B: OPCJE ARKUSZA I WYDRUKU (Miarka 50mm, Linie cięcia, Odstępy) */}
-          {/* ========================================================================= */}
-          <div className="flex flex-col gap-2.5 border-t border-slate-200 pt-3">
-            <div className="flex items-center justify-between text-xs font-bold text-slate-800">
-              <span className="flex items-center gap-1.5">
-                <Sliders className="w-3.5 h-3.5 text-slate-600" />
-                Opcje arkusza i cięcia
-              </span>
-            </div>
-
-            {/* 1. Toggle: 50mm Calibration Ruler (Co to za linijka po lewej?) */}
-            <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl flex flex-col gap-1.5">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Ruler className="w-3.5 h-3.5 text-slate-600" />
-                  <span className="text-xs font-bold text-slate-800">
-                    Miarka kontrolna 50 mm
-                  </span>
-                </div>
-                {/* Switch toggle */}
-                <button
-                  type="button"
-                  onClick={() =>
-                    setSettings((s) => ({
-                      ...s,
-                      includeCalibrationRuler: !s.includeCalibrationRuler,
-                    }))
-                  }
-                  className={`w-9 h-5 flex items-center rounded-full p-0.5 transition-colors cursor-pointer ${
-                    settings.includeCalibrationRuler ? 'bg-emerald-600' : 'bg-slate-300'
+                <ChevronDown
+                  className={`w-4 h-4 text-purple-600 transition-transform duration-200 ${
+                    isBatchMenuOpen ? 'rotate-180' : ''
                   }`}
-                  title="Włącz/wyłącz pasek 50 mm z lewej strony arkusza"
+                />
+              </div>
+            </button>
+
+            {isBatchMenuOpen && (
+              <div className="p-2.5 flex flex-col gap-1.5 border-t border-purple-100 bg-white">
+                {/* 1. Paste from Excel */}
+                <button
+                  onClick={() => setIsExcelModalOpen(true)}
+                  className="w-full px-2.5 py-2 text-xs font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 rounded-lg border border-emerald-200 flex items-center justify-between transition-all cursor-pointer"
+                  title="Wklej tabelę skopiowaną z programu Excel lub Arkuszy Google (Ctrl+V)"
                 >
-                  <div
-                    className={`bg-white w-4 h-4 rounded-full shadow-md transform transition-transform ${
-                      settings.includeCalibrationRuler ? 'translate-x-4' : 'translate-x-0'
-                    }`}
-                  />
+                  <div className="flex items-center gap-1.5">
+                    <FileSpreadsheet className="w-4 h-4 text-emerald-600" />
+                    <span>Wklej z Excela / Schowka</span>
+                  </div>
+                  <span className="text-[10px] bg-white text-emerald-700 px-1 py-0.5 rounded border border-emerald-200 font-mono">
+                    Ctrl+V
+                  </span>
+                </button>
+
+                {/* 2. Series Generator */}
+                <button
+                  onClick={() => setIsSeriesModalOpen(true)}
+                  className="w-full px-2.5 py-2 text-xs font-semibold text-purple-800 bg-purple-50 hover:bg-purple-100 rounded-lg border border-purple-200 flex items-center justify-between transition-all cursor-pointer"
+                  title="Generator ciągów wymiarów (np. 10x2; 15x3; 20x4...)"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <Sparkles className="w-4 h-4 text-purple-600" />
+                    <span>Generator serii wymiarów</span>
+                  </div>
+                  <span className="text-[10px] bg-white text-purple-700 px-1 py-0.5 rounded border border-purple-200 font-mono">
+                    Seria
+                  </span>
+                </button>
+
+                {/* 3. Duplicate #1 to active page */}
+                <button
+                  onClick={() => handleDuplicateFirstToPage(activePage)}
+                  className="w-full px-2.5 py-1.5 text-xs text-slate-700 bg-slate-50 hover:bg-slate-100 rounded-lg border border-slate-200 flex items-center gap-2 transition-colors cursor-pointer"
+                  title={`Kopiuje fiszkę #${activePage * 7 + 1} na pozostałe fiszki tej strony (+1 kod wagi)`}
+                >
+                  <Copy className="w-3.5 h-3.5 text-slate-500" />
+                  <span>Powiel #1 na stronę {activePage + 1} (+1)</span>
+                </button>
+
+                {/* 4. Copy name to all */}
+                <button
+                  onClick={handleCopyFirstNameToAll}
+                  className="w-full px-2.5 py-1.5 text-[11px] text-slate-600 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 rounded-lg border border-slate-200 flex items-center gap-2 transition-colors cursor-pointer"
+                  title="Kopiuje nazwę z pierwszej fiszki do wszystkich fiszek"
+                >
+                  <Layers className="w-3.5 h-3.5 text-slate-400" />
+                  <span>Kopiuj nazwę do wszystkich fiszek</span>
+                </button>
+
+                {/* 5. Renumber codes */}
+                <button
+                  onClick={handleRenumberCodes}
+                  className="w-full px-2.5 py-1.5 text-[11px] text-slate-600 hover:text-slate-900 bg-slate-50 hover:bg-slate-100 rounded-lg border border-slate-200 flex items-center gap-2 transition-colors cursor-pointer"
+                  title="Numeruje kody wagi po kolei (+1 od pierwszej fiszki)"
+                >
+                  <Hash className="w-3.5 h-3.5 text-slate-400" />
+                  <span>Numeruj wagę po kolei (+1)</span>
                 </button>
               </div>
-              <p className="text-[10px] text-slate-500 leading-tight">
-                Pasek 5 cm po lewej stronie arkusza do sprawdzenia skali wydruku 1:1 linijką.
-              </p>
-            </div>
+            )}
+          </div>
 
-            {/* 2. Cutting Guides / Borders */}
-            <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl flex flex-col gap-2">
-              <div className="flex items-center justify-between text-xs font-bold text-slate-800">
-                <span className="flex items-center gap-1.5">
-                  <Scissors className="w-3.5 h-3.5 text-slate-600" />
-                  Linie cięcia fiszek
-                </span>
-                <label className="flex items-center gap-1 text-[11px] font-normal text-slate-600 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={settings.showScissorsIcon}
-                    onChange={(e) =>
-                      setSettings((s) => ({ ...s, showScissorsIcon: e.target.checked }))
-                    }
-                    className="rounded accent-emerald-600 w-3 h-3"
-                  />
-                  <span>Nożyczki</span>
-                </label>
-              </div>
+          {/* Opcje dodatkowe (dyskretne) */}
+          <div className="flex flex-col gap-2 border-t border-slate-200 pt-2.5">
+            {/* Przełącznik linijki kontrolnej 50 mm */}
+            <label className="flex items-center justify-between px-2.5 py-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 cursor-pointer">
+              <span className="flex items-center gap-1.5">
+                <Ruler className="w-3.5 h-3.5 text-slate-500" />
+                <span>Miarka kontrolna 50 mm</span>
+              </span>
+              <input
+                type="checkbox"
+                checked={settings.includeCalibrationRuler}
+                onChange={(e) =>
+                  setSettings((s) => ({ ...s, includeCalibrationRuler: e.target.checked }))
+                }
+                className="accent-emerald-600 w-4 h-4 rounded cursor-pointer"
+              />
+            </label>
 
-              {/* Style selector: Solid / Dashed / None */}
-              <div className="grid grid-cols-3 gap-1">
-                {(
-                  [
-                    { id: 'solid', label: 'Ciągła' },
-                    { id: 'dashed', label: 'Przerywana' },
-                    { id: 'none', label: 'Brak' },
-                  ] as { id: CuttingGuideStyle; label: string }[]
-                ).map((st) => (
-                  <button
-                    key={st.id}
-                    onClick={() =>
-                      setSettings((s) => ({
-                        ...s,
-                        showCuttingGuides: st.id !== 'none',
-                        cuttingGuideStyle: st.id,
-                      }))
-                    }
-                    className={`py-1 text-[11px] font-semibold rounded-md border text-center transition-all cursor-pointer ${
-                      (settings.cuttingGuideStyle === st.id && settings.showCuttingGuides) ||
-                      (st.id === 'none' && !settings.showCuttingGuides)
-                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
-                        : 'bg-white text-slate-700 hover:bg-slate-100 border-slate-200'
-                    }`}
-                  >
-                    {st.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* 3. Vertical Spacing between cards (0mm / 2mm / 4mm) */}
-            <div className="p-2.5 bg-slate-50 border border-slate-200 rounded-xl flex flex-col gap-1.5">
-              <div className="flex items-center justify-between text-xs font-bold text-slate-800">
-                <span>Odstęp między fiszkami:</span>
-                <span className="font-mono text-emerald-800">
-                  {settings.verticalSpacingMm} mm
-                </span>
-              </div>
-              <div className="grid grid-cols-3 gap-1">
-                {[
-                  { mm: 0, label: '0 mm (stykanie)' },
-                  { mm: 2, label: '2 mm (gilotyna)' },
-                  { mm: 4, label: '4 mm (odstęp)' },
-                ].map((sp) => (
-                  <button
-                    key={sp.mm}
-                    onClick={() =>
-                      setSettings((s) => ({ ...s, verticalSpacingMm: sp.mm }))
-                    }
-                    className={`py-1 text-[10px] font-semibold rounded-md border text-center transition-all cursor-pointer ${
-                      settings.verticalSpacingMm === sp.mm
-                        ? 'bg-emerald-600 text-white border-emerald-600'
-                        : 'bg-white text-slate-700 hover:bg-slate-100 border-slate-200'
-                    }`}
-                  >
-                    {sp.label}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* 4. Toggle right section (Cena / Ref) */}
-            <label className="flex items-center justify-between px-2.5 py-2 bg-slate-50 border border-slate-200 rounded-xl text-xs font-medium text-slate-700 cursor-pointer">
-              <span>Pokaż sekcję Ref i Cena</span>
+            {/* Przełącznik sekcji Ref i Cena */}
+            <label className="flex items-center justify-between px-2.5 py-1.5 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg text-xs font-medium text-slate-700 cursor-pointer">
+              <span>Pokaż pole Cena i Nr ref.</span>
               <input
                 type="checkbox"
                 checked={settings.showRightSection}
                 onChange={(e) =>
                   setSettings((s) => ({ ...s, showRightSection: e.target.checked }))
                 }
-                className="accent-emerald-600 w-4 h-4 rounded"
+                className="accent-emerald-600 w-4 h-4 rounded cursor-pointer"
               />
             </label>
           </div>
 
-          {/* Pages Manager Section */}
-          <div className="flex flex-col gap-2 border-t border-slate-200 pt-3">
+          {/* Menadżer stron A4 */}
+          <div className="flex flex-col gap-2 border-t border-slate-200 pt-2.5">
             <div className="flex items-center justify-between text-xs font-bold text-slate-700">
               <span className="flex items-center gap-1.5">
                 <Layers className="w-3.5 h-3.5 text-slate-500" />
@@ -661,7 +595,7 @@ export default function App() {
               </button>
             </div>
 
-            {/* Quick jump page pills */}
+            {/* Pigułki stron */}
             <div className="flex flex-wrap gap-1.5 max-h-32 overflow-y-auto p-1 bg-slate-100 rounded-lg border border-slate-200">
               {Array.from({ length: totalPages }).map((_, pIdx) => (
                 <button
@@ -672,7 +606,7 @@ export default function App() {
                       ? 'bg-emerald-600 text-white shadow-xs'
                       : 'bg-white text-slate-700 hover:bg-slate-200 border border-slate-200'
                   }`}
-                  title={`Przewiń do strony ${pIdx + 1} (fiszki ${pIdx * 7 + 1} - ${Math.min((pIdx + 1) * 7, items.length)})`}
+                  title={`Przewiń do strony ${pIdx + 1}`}
                 >
                   <FileText className="w-3 h-3" />
                   <span>Strona {pIdx + 1}</span>
@@ -681,7 +615,7 @@ export default function App() {
             </div>
           </div>
 
-          {/* Reset button */}
+          {/* Przycisk resetu */}
           <button
             onClick={handleReset}
             className="w-full px-3 py-1.5 text-xs font-medium text-slate-500 hover:text-red-700 hover:bg-red-50 rounded-lg border border-slate-200 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
@@ -692,36 +626,53 @@ export default function App() {
           </button>
         </div>
 
-        {/* Footer: Zoom Controls with Auto-Fit */}
+        {/* DOLNY PASEK ZOOMU Z NATYCHMIASTOWĄ PŁYNNĄ ZMIANĄ I SUWAKIEM */}
         <div className="p-3 bg-slate-50 border-t border-slate-200 flex flex-col gap-2">
           <div className="flex items-center justify-between text-xs">
             <span className="text-slate-600 font-medium">Skala podglądu:</span>
-            <span className="font-mono text-slate-800 font-bold">
+            <span className="font-mono text-emerald-800 font-bold text-sm">
               {Math.round(zoomScale * 100)}%
             </span>
           </div>
+
+          {/* Interaktywny suwak do płynnego przybliżania i oddalania */}
+          <input
+            type="range"
+            min="0.35"
+            max="1.40"
+            step="0.02"
+            value={zoomScale}
+            onChange={(e) => {
+              setAutoFit(false);
+              setZoomScale(parseFloat(e.target.value));
+            }}
+            className="w-full accent-emerald-600 cursor-pointer"
+            title="Przesuń, aby powiększyć lub pomniejszyć podgląd"
+          />
 
           <div className="grid grid-cols-4 gap-1">
             <button
               onClick={() => {
                 setAutoFit(false);
-                setZoomScale((z) => Math.max(0.4, Math.round((z - 0.05) * 100) / 100));
+                setZoomScale((z) => Math.max(0.35, Math.round((z - 0.10) * 100) / 100));
               }}
-              className="py-1 px-2 text-xs text-slate-700 bg-white hover:bg-slate-100 rounded border border-slate-200 flex items-center justify-center cursor-pointer"
-              title="Oddal"
+              className="py-1 px-1.5 text-xs text-slate-700 bg-white hover:bg-slate-100 rounded border border-slate-200 flex items-center justify-center gap-0.5 cursor-pointer"
+              title="Oddal o 10%"
             >
               <ZoomOut className="w-3.5 h-3.5" />
+              <span>-10%</span>
             </button>
 
             <button
               onClick={() => {
                 setAutoFit(false);
-                setZoomScale((z) => Math.min(1.2, Math.round((z + 0.05) * 100) / 100));
+                setZoomScale((z) => Math.min(1.50, Math.round((z + 0.10) * 100) / 100));
               }}
-              className="py-1 px-2 text-xs text-slate-700 bg-white hover:bg-slate-100 rounded border border-slate-200 flex items-center justify-center cursor-pointer"
-              title="Przybliż"
+              className="py-1 px-1.5 text-xs text-slate-700 bg-white hover:bg-slate-100 rounded border border-slate-200 flex items-center justify-center gap-0.5 cursor-pointer"
+              title="Przybliż o 10%"
             >
               <ZoomIn className="w-3.5 h-3.5" />
+              <span>+10%</span>
             </button>
 
             <button
@@ -730,7 +681,7 @@ export default function App() {
                 setZoomScale(1.0);
               }}
               className="py-1 px-1 text-[11px] font-mono text-slate-700 bg-white hover:bg-slate-100 rounded border border-slate-200 flex items-center justify-center cursor-pointer"
-              title="Rozmiar rzeczywisty 100%"
+              title="Rozmiar 100% (skala rzeczywista)"
             >
               100%
             </button>
@@ -740,12 +691,12 @@ export default function App() {
                 setAutoFit(true);
                 setZoomScale(calculateFitScale());
               }}
-              className={`py-1 px-1 text-[11px] font-bold rounded border flex items-center justify-center gap-0.5 cursor-pointer ${
+              className={`py-1 px-1 text-[11px] font-bold rounded border flex items-center justify-center gap-0.5 cursor-pointer transition-colors ${
                 autoFit
-                  ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                  ? 'bg-emerald-100 text-emerald-800 border-emerald-300 shadow-2xs'
                   : 'bg-white text-slate-700 hover:bg-slate-100 border-slate-200'
               }`}
-              title="Dopasuj całą stronę A4 pionowo do wysokości ekranu"
+              title="Dopasuj cały arkusz A4 do wysokości ekranu bez przewijania"
             >
               <Maximize2 className="w-3 h-3" />
               <span>Dopasuj</span>
@@ -753,57 +704,60 @@ export default function App() {
           </div>
 
           <div className="text-[10px] text-slate-500 text-center select-none">
-            {autoFit ? '✓ Cała strona A4 mieści się na ekranie' : 'Kliknij „Dopasuj”, aby dopasować A4'}
+            {autoFit ? '✓ Cała strona A4 mieści się na ekranie' : 'Ctrl + kółko myszy = szybki zoom'}
           </div>
         </div>
       </aside>
 
-      {/* RIGHT / MAIN CANVAS AREA: All A4 Sheets stacked vertically */}
+      {/* GŁÓWNY OBSZAR PODGLĄDU A4 (Przewijany tylko przy wielu stronach lub powiększeniu) */}
       <main
         ref={mainScrollRef}
-        className="flex-1 min-h-screen flex flex-col items-center py-6 px-2 md:px-8 overflow-y-auto no-print"
+        className="flex-1 min-h-screen flex flex-col items-center py-4 px-2 md:px-6 overflow-y-auto no-print"
       >
-        <div className="flex flex-col items-center gap-8 w-full max-w-4xl pb-16">
+        <div className="flex flex-col items-center gap-6 w-full max-w-5xl pb-12">
           {Array.from({ length: totalPages }).map((_, pageIdx) => {
             const pageItems = items.slice(pageIdx * 7, (pageIdx + 1) * 7);
+            const scaledWidthPx = Math.round(794 * zoomScale);
+            const scaledHeightPx = Math.round(1123 * zoomScale);
 
             return (
               <div
                 key={`page_container_${pageIdx}`}
                 id={`a4-sheet-page-${pageIdx}`}
-                className="flex flex-col items-center gap-2 w-full"
+                className="flex flex-col items-center gap-1.5"
               >
-                {/* Page Action Header Bar */}
+                {/* Belka informacyjna nad stroną A4 */}
                 <div
-                  className="w-[210mm] max-w-full flex items-center justify-between px-3 py-1.5 bg-white/90 backdrop-blur-xs rounded-xl border border-slate-300 text-xs text-slate-700 shadow-sm"
+                  className="flex items-center justify-between px-3 py-1 bg-white/95 backdrop-blur-xs rounded-lg border border-slate-300 text-xs text-slate-700 shadow-xs"
                   style={{
-                    width: `${210 * 3.7795 * zoomScale}px`,
+                    width: `${scaledWidthPx}px`,
+                    maxWidth: '100%',
                   }}
                 >
                   <div className="flex items-center gap-2 font-bold text-slate-800">
-                    <span className="w-5 h-5 rounded-full bg-emerald-600 text-white text-[11px] flex items-center justify-center shadow-xs">
+                    <span className="w-4.5 h-4.5 rounded-full bg-emerald-600 text-white text-[10px] flex items-center justify-center shadow-2xs">
                       {pageIdx + 1}
                     </span>
                     <span>Strona {pageIdx + 1} z {totalPages}</span>
-                    <span className="text-[11px] font-normal text-slate-500 font-mono hidden sm:inline">
+                    <span className="text-[10px] font-normal text-slate-500 font-mono hidden sm:inline">
                       (fiszki #{pageIdx * 7 + 1} - #{Math.min((pageIdx + 1) * 7, items.length)})
                     </span>
                   </div>
 
-                  {/* Header actions: Quick batch duplicate for this page, Clear, Delete */}
-                  <div className="flex items-center gap-1.5">
+                  {/* Szybkie akcje strony */}
+                  <div className="flex items-center gap-1">
                     <button
                       onClick={() => handleDuplicateFirstToPage(pageIdx)}
-                      className="px-2.5 py-1 text-[11px] font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 rounded-lg border border-emerald-200 transition-colors cursor-pointer flex items-center gap-1 shadow-2xs"
-                      title={`Kopiuje fiszkę #${pageIdx * 7 + 1} na pozostałe 6 fiszek tej strony (+1 kod wagi)`}
+                      className="px-2 py-0.5 text-[11px] font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 rounded border border-emerald-200 transition-colors cursor-pointer flex items-center gap-1"
+                      title={`Kopiuje fiszkę #${pageIdx * 7 + 1} na całą tę stronę (+1 kod wagi)`}
                     >
                       <Copy className="w-3 h-3 text-emerald-600" />
-                      <span>Powiel #1 na tę stronę</span>
+                      <span>Powiel #1</span>
                     </button>
 
                     <button
                       onClick={() => handleClearPage(pageIdx)}
-                      className="px-2 py-1 text-[11px] text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded-lg border border-slate-200 transition-colors cursor-pointer"
+                      className="px-2 py-0.5 text-[11px] text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded border border-slate-200 transition-colors cursor-pointer"
                       title={`Wyczyść pola na stronie ${pageIdx + 1}`}
                     >
                       Wyczyść
@@ -812,7 +766,7 @@ export default function App() {
                     {totalPages > 1 && (
                       <button
                         onClick={() => handleRemovePage(pageIdx)}
-                        className="px-2 py-1 text-[11px] text-red-600 hover:text-red-700 hover:bg-red-50 rounded-lg border border-red-200 transition-colors cursor-pointer flex items-center gap-1"
+                        className="px-2 py-0.5 text-[11px] text-red-600 hover:text-red-700 hover:bg-red-50 rounded border border-red-200 transition-colors cursor-pointer flex items-center gap-1"
                         title={`Usuń stronę ${pageIdx + 1}`}
                       >
                         <Trash2 className="w-3 h-3" />
@@ -822,44 +776,57 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Scaled A4 Sheet Canvas */}
+                {/* SKALOWANY KONTENER ARKUSZA A4: Wymiary nadrzędne DOKŁADNIE odpowiadają skali, więc auto-fit nie wymaga scrollowania! */}
                 <div
-                  className="transition-transform origin-top flex flex-col items-center"
+                  className="relative transition-all duration-75 flex items-center justify-center"
                   style={{
-                    transform: `scale(${zoomScale})`,
-                    transformOrigin: 'top center',
-                    marginBottom: `-${1123 * (1 - zoomScale)}px`,
+                    width: `${scaledWidthPx}px`,
+                    height: `${scaledHeightPx}px`,
+                    minWidth: `${scaledWidthPx}px`,
+                    minHeight: `${scaledHeightPx}px`,
                   }}
                 >
-                  <A4PrintSheet
-                    items={pageItems}
-                    pageIndex={pageIdx}
-                    totalPages={totalPages}
-                    settings={settings}
-                    selectedId={null}
-                    onSelectItem={() => {}}
-                    onUpdateItem={handleUpdateItem}
-                    isPrintMode={false}
-                  />
+                  <div
+                    style={{
+                      width: '794px',
+                      height: '1123px',
+                      transform: `scale(${zoomScale})`,
+                      transformOrigin: 'top left',
+                      position: 'absolute',
+                      top: 0,
+                      left: 0,
+                    }}
+                  >
+                    <A4PrintSheet
+                      items={pageItems}
+                      pageIndex={pageIdx}
+                      totalPages={totalPages}
+                      settings={settings}
+                      selectedId={null}
+                      onSelectItem={() => {}}
+                      onUpdateItem={handleUpdateItem}
+                      isPrintMode={false}
+                    />
+                  </div>
                 </div>
               </div>
             );
           })}
 
-          {/* Big Add Page Button at the bottom */}
+          {/* Dodaj kolejną stronę A4 */}
           <div className="w-full flex justify-center pt-2">
             <button
               onClick={handleAddPage}
-              className="py-3 px-6 bg-white hover:bg-slate-50 border-2 border-dashed border-emerald-500 hover:border-emerald-600 text-emerald-800 rounded-2xl flex items-center gap-2 font-bold text-sm shadow-sm transition-all cursor-pointer"
+              className="py-2.5 px-5 bg-white hover:bg-slate-50 border-2 border-dashed border-emerald-500 hover:border-emerald-600 text-emerald-800 rounded-xl flex items-center gap-2 font-bold text-xs shadow-2xs transition-all cursor-pointer"
             >
-              <Plus className="w-5 h-5 text-emerald-600" />
+              <Plus className="w-4 h-4 text-emerald-600" />
               <span>+ Dodaj kolejną stronę A4 (+7 fiszek)</span>
             </button>
           </div>
         </div>
       </main>
 
-      {/* DEDICATED PRINT CONTAINER (Triggered by window.print()) */}
+      {/* KONTENER DLA DRUKU PRZEGLĄDARKI (Ukryty na ekranie, aktywny podczas window.print()) */}
       <div className="hidden print:block">
         {Array.from({ length: totalPages }).map((_, pageIdx) => {
           const pageItems = items.slice(pageIdx * 7, (pageIdx + 1) * 7);
@@ -879,7 +846,7 @@ export default function App() {
         })}
       </div>
 
-      {/* MODAL 1: Wklej ze schowka / Excela (Option C) */}
+      {/* MODAL 1: Wklej ze schowka / Excela */}
       <ExcelImportModal
         isOpen={isExcelModalOpen}
         onClose={() => setIsExcelModalOpen(false)}
@@ -887,7 +854,7 @@ export default function App() {
         existingCount={items.length}
       />
 
-      {/* MODAL 2: Generator serii wymiarów (Option C) */}
+      {/* MODAL 2: Generator serii wymiarów */}
       <DimensionSeriesModal
         isOpen={isSeriesModalOpen}
         onClose={() => setIsSeriesModalOpen(false)}
