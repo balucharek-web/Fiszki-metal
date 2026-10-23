@@ -372,9 +372,13 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
     setScanStatusText('Odczytywanie danych etykiety ESL (OCR w przeglądarce)...');
     let ocrResult: OcrRecognizedLabel | null = null;
     try {
-      ocrResult = await scanEslWithClientOcr(base64Image, (_pct, status) => {
-        setScanStatusText(status);
-      });
+      ocrResult = await scanEslWithClientOcr(
+        base64Image,
+        (_pct, status) => {
+          setScanStatusText(status);
+        },
+        clientBarcode?.code
+      );
     } catch (ocrErr) {
       console.warn('Błąd client-side OCR:', ocrErr);
     }
