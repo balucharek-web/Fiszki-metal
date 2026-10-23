@@ -62,9 +62,10 @@ export async function generateFillablePdf(
   // correctly find and render bold fonts in interactive fields
   const dr = pdfDoc.context.obj({});
   const fontDict = pdfDoc.context.obj({});
-  fontDict.set(PDFName.of('Helvetica-Bold'), boldFont.ref);
+  fontDict.set(PDFName.of('Helvetica-Bold'), helvBold.ref);
   fontDict.set(PDFName.of('HeBo'), helvBold.ref);
-  fontDict.set(PDFName.of('Helvetica'), boldFont.ref);
+  fontDict.set(PDFName.of('Helvetica'), helvBold.ref);
+  fontDict.set(PDFName.of('Helv'), helvBold.ref);
   if (customFontBold) {
     fontDict.set(PDFName.of('LiberationSans-Bold'), customFontBold.ref);
     fontDict.set(PDFName.of('CustomBold'), customFontBold.ref);
@@ -237,7 +238,7 @@ export async function generateFillablePdf(
       width: 30 * MM_TO_PT,
       height: 11.2 * MM_TO_PT,
       borderWidth: 0,
-      font: boldFont,
+      font: helvBold,
     });
     scaleField.setFontSize(28);
     scaleField.acroField.setDefaultAppearance('/Helvetica-Bold 28 Tf 0 0 0 rg');
@@ -248,7 +249,7 @@ export async function generateFillablePdf(
 
     if (item.scaleCode) {
       try {
-        scaleField.updateAppearances(boldFont);
+        scaleField.updateAppearances(helvBold);
       } catch {
         // ignore
       }

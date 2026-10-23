@@ -132,7 +132,6 @@ export const FiszkaCard: React.FC<FiszkaCardProps> = ({
                 lineHeight: 1.1,
                 fontFamily: "'Plus Jakarta Sans', 'Inter', sans-serif",
                 fontWeight: 900,
-                WebkitTextStroke: '0.45px #000000',
               }}
               title="Kliknij, aby zmienić wymiar (czyści się automatycznie)"
             />
@@ -144,7 +143,6 @@ export const FiszkaCard: React.FC<FiszkaCardProps> = ({
                 lineHeight: 1.1,
                 fontFamily: "'Plus Jakarta Sans', 'Inter', sans-serif",
                 fontWeight: 900,
-                WebkitTextStroke: '0.45px #000000',
               }}
             >
               {item.dimension || '6x80 mm'}
@@ -170,8 +168,7 @@ export const FiszkaCard: React.FC<FiszkaCardProps> = ({
               style={{
                 fontSize: '4.4mm',
                 fontFamily: "'Plus Jakarta Sans', 'Inter', sans-serif",
-                fontWeight: 900,
-                WebkitTextStroke: '0.3px #000000',
+                fontWeight: 800,
               }}
             >
               {settings.scaleLabelText || 'Wpisz na wadze:'}
@@ -193,7 +190,6 @@ export const FiszkaCard: React.FC<FiszkaCardProps> = ({
                   lineHeight: 1,
                   fontFamily: "'JetBrains Mono', monospace",
                   fontWeight: 900,
-                  WebkitTextStroke: '0.75px #000000',
                 }}
                 title="Kliknij, aby zmienić numer na wadze (czyści się automatycznie)"
               />
@@ -205,7 +201,6 @@ export const FiszkaCard: React.FC<FiszkaCardProps> = ({
                   lineHeight: 1,
                   fontFamily: "'JetBrains Mono', monospace",
                   fontWeight: 900,
-                  WebkitTextStroke: '0.75px #000000',
                 }}
               >
                 {item.scaleCode || '247'}
