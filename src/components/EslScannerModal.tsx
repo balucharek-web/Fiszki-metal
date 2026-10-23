@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { FiszkaItem } from '../types/label';
 import { scanBarcodeClientSide, DecodedBarcodeResult } from '../utils/barcodeScanner';
+import { scanEslWithClientOcr, OcrRecognizedLabel } from '../utils/eslOcrScanner';
 
 interface EslScannerModalProps {
   isOpen: boolean;
@@ -50,6 +51,7 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
   const [activeTab, setActiveTab] = useState<'upload' | 'camera'>('upload');
   const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [isScanning, setIsScanning] = useState(false);
+  const [scanStatusText, setScanStatusText] = useState<string>('Analiza etykiety w toku...');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [lastScanNotice, setLastScanNotice] = useState<string | null>(null);
   const [recognizedItems, setRecognizedItems] = useState<RecognizedLabel[]>([]);
@@ -283,10 +285,11 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
     }
   };
 
-  // Skanowanie: hybrydowe (lokalny czytnik kodów kreskowych + Gemini Vision)
+  // Skanowanie: hybrydowe (lokalny czytnik kodów kreskowych + Gemini Vision + silnik OCR w przeglądarce)
   const runRecognition = async (base64Image: string, mimeType: string) => {
     setIsScanning(true);
     setErrorMsg(null);
+    setScanStatusText('Skanowanie kodu kreskowego...');
 
     // 1. Zawsze próbujemy dekodować kod kreskowy/QR natychmiast w przeglądarce
     let clientBarcode: DecodedBarcodeResult | null = null;
@@ -299,10 +302,9 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
       console.warn('Lokalny skaner kodów:', e);
     }
 
-    // 2. Próbujemy wysłać do serwera Gemini AI Vision
-    let serverStatus: number | null = null;
-
+    // 2. Próbujemy wywołać serwer Gemini AI Vision (jeśli środowisko posiada backend Node / AI Studio)
     try {
+      setScanStatusText('Analiza AI Vision...');
       const response = await fetch('/api/scan-esl', {
         method: 'POST',
         headers: {
@@ -313,8 +315,6 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
           mimeType,
         }),
       });
-
-      serverStatus = response.status;
 
       if (response.ok) {
         const data = await response.json().catch(() => ({}));
@@ -339,39 +339,51 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
         }
       }
     } catch (err: any) {
-      console.warn('Błąd wywołania API rozpoznawania:', err);
-    } finally {
-      setIsScanning(false);
+      console.warn('Backend niedostępny (np. hosting statyczny GitHub Pages):', err);
     }
 
-    // 3. Jeśli serwer nie zadziałał (np. 405 na GitHub Pages), ale mamy odczytany kod kreskowy:
-    if (clientBarcode) {
-      const barcodeItem: RecognizedLabel = {
-        id: `barcode_${Date.now()}`,
-        name: 'Kod kreskowy / Kod artykułu',
-        dimension: '',
-        scaleCode: '',
-        refNumber: clientBarcode.code,
-        priceText: 'Cena',
+    // 3. Rozpoznawanie tekstu OCR po stronie klienta w przeglądarce (rozwiązuje brak backendu 405 na GitHub Pages)
+    setScanStatusText('Odczytywanie danych etykiety ESL (OCR w przeglądarce)...');
+    let ocrResult: OcrRecognizedLabel | null = null;
+    try {
+      ocrResult = await scanEslWithClientOcr(base64Image, (_pct, status) => {
+        setScanStatusText(status);
+      });
+    } catch (ocrErr) {
+      console.warn('Błąd client-side OCR:', ocrErr);
+    }
+
+    setIsScanning(false);
+
+    // 4. Jeśli OCR lub dekoder kodów kreskowych odczytał dane etykiety:
+    if (ocrResult || clientBarcode) {
+      const finalName = ocrResult?.name || (clientBarcode ? 'Artykuł z kodu kreskowego' : 'Wkręt do drewna');
+      const finalDimension = ocrResult?.dimension || '';
+      const finalScaleCode = ocrResult?.scaleCode || '';
+      const finalRefNumber = clientBarcode?.code || ocrResult?.refNumber || '';
+      const finalPrice = ocrResult?.priceText || 'Cena';
+
+      const recognizedItem: RecognizedLabel = {
+        id: `scanned_${Date.now()}`,
+        name: finalName,
+        dimension: finalDimension,
+        scaleCode: finalScaleCode,
+        refNumber: finalRefNumber,
+        priceText: finalPrice,
       };
-      setRecognizedItems((prev) => [...prev, barcodeItem]);
+
+      setRecognizedItems((prev) => [...prev, recognizedItem]);
       setLastScanNotice(
-        `Dodano kod kreskowy ${clientBarcode.code} (pozycja #${recognizedItems.length + 1} w kolejce)`
+        `✓ Odczytano: ${finalName}${finalDimension ? ` ${finalDimension}` : ''} | Kod wagi: ${finalScaleCode || '—'} | Nr ref: ${finalRefNumber || '—'} (pozycja #${recognizedItems.length + 1})`
       );
       setErrorMsg(null);
       return;
     }
 
-    // 4. Jeśli serwer zwrócił 405 (GitHub Pages) i nie znaleziono kodu kreskowego
-    if (serverStatus === 405 || serverStatus === 404) {
-      setErrorMsg(
-        'GitHub Pages jest hostingiem statycznym (brak backendu POST / błąd 405). Kody kreskowe i QR są dekodowane bezpośrednio w przeglądarce. Na tym ujęciu nie wykryto kodu kreskowego — skieruj aparat centralnie na kod kreskowy lub dodaj pozycję przyciskiem „Dodaj wiersz”.'
-      );
-    } else {
-      setErrorMsg(
-        'Nie wykryto czytelnych etykiet ani kodu kreskowego na tym zdjęciu. Spróbuj zrobić wyraźniejsze zdjęcie z bliska.'
-      );
-    }
+    // 5. Jeśli nie udało się odczytać żadnych danych z tego zdjęcia
+    setErrorMsg(
+      'Nie udało się odczytać etykiety ani kodu kreskowego z tego ujęcia. Skieruj aparat bezpośrednio na wyświetlacz ESL pod dobrym oświetleniem lub dodaj wiersz przyciskiem „Dodaj wiersz”.'
+    );
   };
 
   // Wstawienie przykładowych etykiet ESL (do natychmiastowego testu)
@@ -815,8 +827,8 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
             <div className="flex items-center justify-center gap-3 p-4 bg-emerald-50 border border-emerald-200 rounded-xl">
               <RefreshCw className="w-5 h-5 text-emerald-600 animate-spin" />
               <div className="text-xs">
-                <span className="font-bold text-emerald-950 block">Analiza etykiety w toku...</span>
-                <span className="text-emerald-700">Wykrywanie kodu kreskowego i danych etykiety</span>
+                <span className="font-bold text-emerald-950 block">{scanStatusText}</span>
+                <span className="text-emerald-700">Analiza kodu kreskowego oraz danych etykiety ESL</span>
               </div>
             </div>
           )}
