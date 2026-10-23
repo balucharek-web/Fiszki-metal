@@ -155,8 +155,8 @@ export default function App() {
     // Format A4 przy 96 DPI: 794px szerokości x 1123px wysokości
     const a4Height = 1123;
     const a4Width = 794;
-    // Odliczamy nagłówek strony (~38px), paddingi py-4 (32px), bufor bezpieczeństwa (35px) = ~105px
-    const availableHeight = Math.max(300, window.innerHeight - 105);
+    // Odliczamy pasek powiększenia (~50px), nagłówek (~38px), paddingi py-4 (32px), bufor bezpieczeństwa = ~140px
+    const availableHeight = Math.max(300, window.innerHeight - 140);
     const isDesktop = window.innerWidth >= 768;
     const sidebarWidth = isDesktop ? 335 : 0;
     const availableWidth = Math.max(300, window.innerWidth - sidebarWidth - 48);
@@ -167,7 +167,7 @@ export default function App() {
     return Math.max(0.35, Math.round(fit * 100) / 100);
   };
 
-  // Dopasowanie do okna przy zmianie rozmiaru ekranu
+  // Dopasowanie do okna przy zmianie rozmiaru ekranu (tylko gdy włączone autoFit)
   useEffect(() => {
     const handleResize = () => {
       if (autoFit) {
@@ -179,15 +179,44 @@ export default function App() {
     return () => window.removeEventListener('resize', handleResize);
   }, [autoFit]);
 
-  // Obsługa powiększania/pomniejszania kółkiem myszy z wciśniętym klawiszem Ctrl
-  const handleWheel = (e: React.WheelEvent) => {
-    if (e.ctrlKey) {
-      e.preventDefault();
-      setAutoFit(false);
-      const delta = e.deltaY < 0 ? 0.05 : -0.05;
-      setZoomScale((z) => Math.max(0.35, Math.min(1.5, Math.round((z + delta) * 100) / 100)));
-    }
-  };
+  // Aktywna obsługa kółka myszy z Ctrl na kontenerze podglądu (passive: false zapobiega blokowaniu przez przeglądarkę)
+  useEffect(() => {
+    const container = mainScrollRef.current;
+    if (!container) return;
+
+    const onNativeWheel = (e: WheelEvent) => {
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault();
+        setAutoFit(false);
+        const delta = e.deltaY < 0 ? 0.05 : -0.05;
+        setZoomScale((z) => Math.max(0.35, Math.min(1.6, Math.round((z + delta) * 100) / 100)));
+      }
+    };
+
+    container.addEventListener('wheel', onNativeWheel, { passive: false });
+    return () => container.removeEventListener('wheel', onNativeWheel);
+  }, []);
+
+  // Skróty klawiszowe Ctrl + '+' oraz Ctrl + '-' oraz Ctrl + '0'
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && (e.key === '+' || e.key === '=')) {
+        e.preventDefault();
+        setAutoFit(false);
+        setZoomScale((z) => Math.min(1.6, Math.round((z + 0.05) * 100) / 100));
+      } else if ((e.ctrlKey || e.metaKey) && e.key === '-') {
+        e.preventDefault();
+        setAutoFit(false);
+        setZoomScale((z) => Math.max(0.35, Math.round((z - 0.05) * 100) / 100));
+      } else if ((e.ctrlKey || e.metaKey) && e.key === '0') {
+        e.preventDefault();
+        setAutoFit(true);
+        setZoomScale(calculateFitScale());
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   const handleUpdateItem = (id: string, updated: Partial<FiszkaItem>) => {
     setItems((prev) =>
@@ -385,10 +414,7 @@ export default function App() {
   };
 
   return (
-    <div
-      className="min-h-screen bg-slate-200/90 flex flex-col md:flex-row select-text font-sans"
-      onWheel={handleWheel}
-    >
+    <div className="min-h-screen bg-slate-200/90 flex flex-col md:flex-row select-text font-sans">
       {/* LEWY PANEL KONTROLNY (Ukryty podczas druku) */}
       <aside className="no-print w-full md:w-84 shrink-0 bg-white border-r border-slate-300 md:h-screen md:sticky md:top-0 flex flex-col justify-between shadow-xl z-30 overflow-y-auto">
         <div className="p-4 flex flex-col gap-3.5">
@@ -434,13 +460,14 @@ export default function App() {
               <span>Drukuj stronę (Ctrl+P)</span>
             </button>
 
-            {/* Opcja 3: Czysty szablon PDF */}
+            {/* Opcja 3: Czysty szablon PDF (pusty wzorzec do druku / ręcznego wypełnienia) */}
             <button
               onClick={() => handleDownloadFilledPdf(true)}
               disabled={isGeneratingPdf}
-              className="w-full py-1.5 px-3 text-[11px] font-medium text-slate-500 hover:text-slate-800 hover:bg-slate-50 rounded-lg flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
-              title="Pobierz pusty szablon PDF do odręcznego pisania lub w programie PDF"
+              className="w-full py-2 px-3 text-xs font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-xl flex items-center justify-center gap-2 transition-all cursor-pointer shadow-2xs"
+              title="Pobierz pusty, czysty szablon PDF (7 fiszek A4) do odręcznego pisania lub edycji"
             >
+              <FileText className="w-4 h-4 text-emerald-600" />
               <span>Pobierz czysty szablon PDF</span>
             </button>
           </div>
@@ -626,21 +653,21 @@ export default function App() {
           </button>
         </div>
 
-        {/* DOLNY PASEK ZOOMU Z NATYCHMIASTOWĄ PŁYNNĄ ZMIANĄ I SUWAKIEM */}
+        {/* DOLNY PASEK ZOOMU W PANELU BOCZNYM */}
         <div className="p-3 bg-slate-50 border-t border-slate-200 flex flex-col gap-2">
           <div className="flex items-center justify-between text-xs">
             <span className="text-slate-600 font-medium">Skala podglądu:</span>
-            <span className="font-mono text-emerald-800 font-bold text-sm">
+            <span className="font-mono text-emerald-800 font-black text-sm bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
               {Math.round(zoomScale * 100)}%
             </span>
           </div>
 
-          {/* Interaktywny suwak do płynnego przybliżania i oddalania */}
+          {/* Interaktywny suwak */}
           <input
             type="range"
             min="0.35"
-            max="1.40"
-            step="0.02"
+            max="1.60"
+            step="0.01"
             value={zoomScale}
             onChange={(e) => {
               setAutoFit(false);
@@ -654,25 +681,25 @@ export default function App() {
             <button
               onClick={() => {
                 setAutoFit(false);
-                setZoomScale((z) => Math.max(0.35, Math.round((z - 0.10) * 100) / 100));
+                setZoomScale((z) => Math.max(0.35, Math.round((z - 0.05) * 100) / 100));
               }}
               className="py-1 px-1.5 text-xs text-slate-700 bg-white hover:bg-slate-100 rounded border border-slate-200 flex items-center justify-center gap-0.5 cursor-pointer"
-              title="Oddal o 10%"
+              title="Oddal o 5%"
             >
               <ZoomOut className="w-3.5 h-3.5" />
-              <span>-10%</span>
+              <span>-5%</span>
             </button>
 
             <button
               onClick={() => {
                 setAutoFit(false);
-                setZoomScale((z) => Math.min(1.50, Math.round((z + 0.10) * 100) / 100));
+                setZoomScale((z) => Math.min(1.60, Math.round((z + 0.05) * 100) / 100));
               }}
               className="py-1 px-1.5 text-xs text-slate-700 bg-white hover:bg-slate-100 rounded border border-slate-200 flex items-center justify-center gap-0.5 cursor-pointer"
-              title="Przybliż o 10%"
+              title="Przybliż o 5%"
             >
               <ZoomIn className="w-3.5 h-3.5" />
-              <span>+10%</span>
+              <span>+5%</span>
             </button>
 
             <button
@@ -680,7 +707,11 @@ export default function App() {
                 setAutoFit(false);
                 setZoomScale(1.0);
               }}
-              className="py-1 px-1 text-[11px] font-mono text-slate-700 bg-white hover:bg-slate-100 rounded border border-slate-200 flex items-center justify-center cursor-pointer"
+              className={`py-1 px-1 text-[11px] font-mono rounded border flex items-center justify-center cursor-pointer ${
+                !autoFit && Math.round(zoomScale * 100) === 100
+                  ? 'bg-emerald-600 text-white border-emerald-600 font-bold'
+                  : 'bg-white text-slate-700 hover:bg-slate-100 border-slate-200'
+              }`}
               title="Rozmiar 100% (skala rzeczywista)"
             >
               100%
@@ -693,7 +724,7 @@ export default function App() {
               }}
               className={`py-1 px-1 text-[11px] font-bold rounded border flex items-center justify-center gap-0.5 cursor-pointer transition-colors ${
                 autoFit
-                  ? 'bg-emerald-100 text-emerald-800 border-emerald-300 shadow-2xs'
+                  ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs'
                   : 'bg-white text-slate-700 hover:bg-slate-100 border-slate-200'
               }`}
               title="Dopasuj cały arkusz A4 do wysokości ekranu bez przewijania"
@@ -704,7 +735,7 @@ export default function App() {
           </div>
 
           <div className="text-[10px] text-slate-500 text-center select-none">
-            {autoFit ? '✓ Cała strona A4 mieści się na ekranie' : 'Ctrl + kółko myszy = szybki zoom'}
+            {autoFit ? '✓ Dopasowano do ekranu bez przewijania' : 'Ctrl + kółko myszy = szybki zoom'}
           </div>
         </div>
       </aside>
@@ -712,8 +743,100 @@ export default function App() {
       {/* GŁÓWNY OBSZAR PODGLĄDU A4 (Przewijany tylko przy wielu stronach lub powiększeniu) */}
       <main
         ref={mainScrollRef}
-        className="flex-1 min-h-screen flex flex-col items-center py-4 px-2 md:px-6 overflow-y-auto no-print"
+        className="flex-1 min-h-screen flex flex-col items-center py-3 px-2 md:px-6 overflow-y-auto no-print"
       >
+        {/* PŁYWAJĄCY PASEK ZOOMU WIDOCZNY ZAWSZE BEZPOŚREDNIO NAD ARKUSZEM */}
+        <div className="sticky top-2 z-20 mb-3 flex flex-wrap items-center justify-center gap-2 px-3 py-1.5 bg-white/95 backdrop-blur-md rounded-2xl border border-slate-300 shadow-md">
+          {/* Zoom Out */}
+          <button
+            onClick={() => {
+              setAutoFit(false);
+              setZoomScale((z) => Math.max(0.35, Math.round((z - 0.05) * 100) / 100));
+            }}
+            className="p-1.5 text-slate-700 hover:text-emerald-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+            title="Pomniejsz podgląd (-5%)"
+          >
+            <ZoomOut className="w-4 h-4" />
+          </button>
+
+          {/* Slider */}
+          <input
+            type="range"
+            min="0.35"
+            max="1.60"
+            step="0.01"
+            value={zoomScale}
+            onChange={(e) => {
+              setAutoFit(false);
+              setZoomScale(parseFloat(e.target.value));
+            }}
+            className="w-24 sm:w-36 accent-emerald-600 cursor-pointer"
+            title="Płynny suwak przybliżenia"
+          />
+
+          {/* Zoom In */}
+          <button
+            onClick={() => {
+              setAutoFit(false);
+              setZoomScale((z) => Math.min(1.60, Math.round((z + 0.05) * 100) / 100));
+            }}
+            className="p-1.5 text-slate-700 hover:text-emerald-700 hover:bg-slate-100 rounded-lg transition-colors cursor-pointer"
+            title="Powiększ podgląd (+5%)"
+          >
+            <ZoomIn className="w-4 h-4" />
+          </button>
+
+          {/* Duży, wyraźny wskaźnik procentowy */}
+          <span className="font-mono text-xs font-black px-2.5 py-0.5 rounded-lg bg-emerald-100 text-emerald-900 border border-emerald-300 min-w-[54px] text-center shadow-2xs">
+            {Math.round(zoomScale * 100)}%
+          </span>
+
+          <div className="h-4 w-px bg-slate-300 mx-0.5 hidden sm:block" />
+
+          {/* Szybkie presety procentowe */}
+          <div className="hidden sm:flex items-center gap-1">
+            {[0.5, 0.75, 1.0, 1.25].map((preset) => {
+              const isSelected = !autoFit && Math.round(zoomScale * 100) === Math.round(preset * 100);
+              return (
+                <button
+                  key={preset}
+                  onClick={() => {
+                    setAutoFit(false);
+                    setZoomScale(preset);
+                  }}
+                  className={`px-2 py-0.5 text-[11px] font-mono rounded-md border transition-all cursor-pointer ${
+                    isSelected
+                      ? 'bg-emerald-600 text-white border-emerald-600 font-bold shadow-2xs'
+                      : 'bg-slate-50 text-slate-700 hover:bg-slate-100 border-slate-200'
+                  }`}
+                  title={`Ustaw skalę dokładnie ${Math.round(preset * 100)}%`}
+                >
+                  {Math.round(preset * 100)}%
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="h-4 w-px bg-slate-300 mx-0.5 hidden sm:block" />
+
+          {/* Przycisk Dopasuj do ekranu (Auto-Fit) */}
+          <button
+            onClick={() => {
+              setAutoFit(true);
+              setZoomScale(calculateFitScale());
+            }}
+            className={`px-2.5 py-1 text-xs font-semibold rounded-lg border flex items-center gap-1 transition-all cursor-pointer ${
+              autoFit
+                ? 'bg-emerald-600 text-white border-emerald-600 shadow-2xs font-bold'
+                : 'bg-white text-slate-700 hover:bg-slate-100 border-slate-300'
+            }`}
+            title="Dopasuj arkusz do wysokości okna"
+          >
+            <Maximize2 className="w-3.5 h-3.5" />
+            <span>Dopasuj do ekranu</span>
+          </button>
+        </div>
+
         <div className="flex flex-col items-center gap-6 w-full max-w-5xl pb-12">
           {Array.from({ length: totalPages }).map((_, pageIdx) => {
             const pageItems = items.slice(pageIdx * 7, (pageIdx + 1) * 7);
