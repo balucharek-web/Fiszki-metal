@@ -46,10 +46,20 @@ export const FiszkaCard: React.FC<FiszkaCardProps> = ({
     }
   };
 
+  // Determine border style for cutting guides
+  let borderClass = 'border border-slate-300';
+  if (!settings.showCuttingGuides || settings.cuttingGuideStyle === 'none') {
+    borderClass = isPrintMode ? 'border border-transparent' : 'border border-dashed border-slate-200';
+  } else if (settings.cuttingGuideStyle === 'dashed') {
+    borderClass = 'border border-dashed border-slate-400';
+  } else {
+    borderClass = 'border border-slate-300';
+  }
+
   return (
     <div
       onClick={onSelect}
-      className={`relative box-border bg-white flex items-center overflow-hidden text-black border border-slate-300 ${
+      className={`relative box-border bg-white flex items-center overflow-hidden text-black ${borderClass} ${
         !isPrintMode ? 'transition-all hover:border-slate-400 group' : ''
       }`}
       style={{
@@ -211,76 +221,78 @@ export const FiszkaCard: React.FC<FiszkaCardProps> = ({
       </div>
 
       {/* 3. RIGHT SECTION: Czarna ramka 5.5 cm szerokości × 3.7 cm wysokości z marginesem 5mm od końca */}
-      <div
-        className="flex items-center justify-end shrink-0 pr-[5mm]"
-        style={{ width: '60mm', height: '40mm' }}
-      >
+      {settings.showRightSection && (
         <div
-          className="box-border border border-black bg-white flex flex-col justify-between items-end p-[2.5mm] overflow-hidden"
-          style={{
-            width: '55mm',
-            height: '37mm',
-            minWidth: '55mm',
-            maxWidth: '55mm',
-            minHeight: '37mm',
-            maxHeight: '37mm',
-          }}
+          className="flex items-center justify-end shrink-0 pr-[5mm]"
+          style={{ width: '60mm', height: '40mm' }}
         >
-          {/* Top: Cena */}
-          <div className="w-full flex justify-end text-right">
-            {!isPrintMode ? (
-              <input
-                type="text"
-                value={item.priceText ?? 'Cena'}
-                onChange={(e) => handleTextChange('priceText', e.target.value)}
-                onFocus={() => handleFocus('priceText', item.priceText ?? 'Cena')}
-                onBlur={() => handleBlur('priceText', item.priceText ?? 'Cena')}
-                placeholder="Cena"
-                className="w-full text-right text-black font-bold bg-transparent border-b border-transparent hover:border-slate-300 focus:border-emerald-600 focus:bg-emerald-50/30 focus:outline-none px-1 py-0.5 rounded-xs"
-                style={{ fontSize: '3.8mm', lineHeight: 1.1, fontWeight: 700 }}
-                title="Kliknij, aby zmienić tekst Cena (czyści się automatycznie)"
-              />
-            ) : (
-              <span
-                className="font-bold text-black px-1"
-                style={{ fontSize: '3.8mm', lineHeight: 1.1, fontWeight: 700 }}
-              >
-                {item.priceText || 'Cena'}
-              </span>
-            )}
-          </div>
+          <div
+            className="box-border border border-black bg-white flex flex-col justify-between items-end p-[2.5mm] overflow-hidden"
+            style={{
+              width: '55mm',
+              height: '37mm',
+              minWidth: '55mm',
+              maxWidth: '55mm',
+              minHeight: '37mm',
+              maxHeight: '37mm',
+            }}
+          >
+            {/* Top: Cena */}
+            <div className="w-full flex justify-end text-right">
+              {!isPrintMode ? (
+                <input
+                  type="text"
+                  value={item.priceText ?? 'Cena'}
+                  onChange={(e) => handleTextChange('priceText', e.target.value)}
+                  onFocus={() => handleFocus('priceText', item.priceText ?? 'Cena')}
+                  onBlur={() => handleBlur('priceText', item.priceText ?? 'Cena')}
+                  placeholder="Cena"
+                  className="w-full text-right text-black font-bold bg-transparent border-b border-transparent hover:border-slate-300 focus:border-emerald-600 focus:bg-emerald-50/30 focus:outline-none px-1 py-0.5 rounded-xs"
+                  style={{ fontSize: '3.8mm', lineHeight: 1.1, fontWeight: 700 }}
+                  title="Kliknij, aby zmienić tekst Cena (czyści się automatycznie)"
+                />
+              ) : (
+                <span
+                  className="font-bold text-black px-1"
+                  style={{ fontSize: '3.8mm', lineHeight: 1.1, fontWeight: 700 }}
+                >
+                  {item.priceText || 'Cena'}
+                </span>
+              )}
+            </div>
 
-          {/* Bottom: Ref: [numer] */}
-          <div className="w-full flex items-center justify-end gap-1 text-right">
-            <span
-              className="text-black font-bold select-none"
-              style={{ fontSize: '3.6mm', fontWeight: 700 }}
-            >
-              Ref:
-            </span>
-            {!isPrintMode ? (
-              <input
-                type="text"
-                value={item.refNumber ?? '42660256'}
-                onChange={(e) => handleTextChange('refNumber', e.target.value)}
-                onFocus={() => handleFocus('refNumber', item.refNumber ?? '42660256')}
-                onBlur={() => handleBlur('refNumber', item.refNumber ?? '42660256')}
-                placeholder="42660256"
-                className="w-[34mm] text-right text-black font-black font-mono tracking-tight bg-transparent border-b border-transparent hover:border-slate-400 focus:border-emerald-600 focus:bg-emerald-50/40 focus:outline-none px-1 py-0.5 rounded-xs"
-                style={{ fontSize: '3.6mm', fontWeight: 900 }}
-                title="Kliknij, aby zmienić numer referencji (czyści się automatycznie)"
-              />
-            ) : (
+            {/* Bottom: Ref: [numer] */}
+            <div className="w-full flex items-center justify-end gap-1 text-right">
               <span
-                className="font-black font-mono text-black tracking-tight px-1"
-                style={{ fontSize: '3.6mm', fontWeight: 900 }}
+                className="text-black font-bold select-none"
+                style={{ fontSize: '3.6mm', fontWeight: 700 }}
               >
-                {item.refNumber || '42660256'}
+                Ref:
               </span>
-            )}
+              {!isPrintMode ? (
+                <input
+                  type="text"
+                  value={item.refNumber ?? '42660256'}
+                  onChange={(e) => handleTextChange('refNumber', e.target.value)}
+                  onFocus={() => handleFocus('refNumber', item.refNumber ?? '42660256')}
+                  onBlur={() => handleBlur('refNumber', item.refNumber ?? '42660256')}
+                  placeholder="42660256"
+                  className="w-[34mm] text-right text-black font-black font-mono tracking-tight bg-transparent border-b border-transparent hover:border-slate-400 focus:border-emerald-600 focus:bg-emerald-50/40 focus:outline-none px-1 py-0.5 rounded-xs"
+                  style={{ fontSize: '3.6mm', fontWeight: 900 }}
+                  title="Kliknij, aby zmienić numer referencji (czyści się automatycznie)"
+                />
+              ) : (
+                <span
+                  className="font-black font-mono text-black tracking-tight px-1"
+                  style={{ fontSize: '3.6mm', fontWeight: 900 }}
+                >
+                  {item.refNumber || '42660256'}
+                </span>
+              )}
+            </div>
           </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };
