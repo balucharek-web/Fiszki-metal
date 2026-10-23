@@ -8,6 +8,7 @@ import { FiszkaItem, SheetSettings } from './types/label';
 import { A4PrintSheet } from './components/A4PrintSheet';
 import { ExcelImportModal } from './components/ExcelImportModal';
 import { DimensionSeriesModal } from './components/DimensionSeriesModal';
+import { EslScannerModal } from './components/EslScannerModal';
 import {
   Printer,
   Copy,
@@ -25,6 +26,7 @@ import {
   FileSpreadsheet,
   Ruler,
   ChevronDown,
+  Camera,
 } from 'lucide-react';
 import { generateFillablePdf, downloadBlob } from './utils/pdfGenerator';
 
@@ -136,6 +138,7 @@ export default function App() {
   // Modale dla narzędzi masowych
   const [isExcelModalOpen, setIsExcelModalOpen] = useState(false);
   const [isSeriesModalOpen, setIsSeriesModalOpen] = useState(false);
+  const [isEslModalOpen, setIsEslModalOpen] = useState(false);
 
   const mainScrollRef = useRef<HTMLDivElement>(null);
 
@@ -369,6 +372,66 @@ export default function App() {
     }
   };
 
+  // Zastosowanie etykiet rozpoznanych ze skanera ESL
+  const handleApplyEslItems = (
+    scannedItems: FiszkaItem[],
+    target: 'activePage' | 'newPage' | 'replaceAll'
+  ) => {
+    if (target === 'replaceAll') {
+      const needed = Math.max(7, Math.ceil(scannedItems.length / 7) * 7);
+      const padded = [...scannedItems];
+      while (padded.length < needed) {
+        padded.push({
+          id: `fiszka_pad_${Date.now()}_${padded.length}`,
+          name: scannedItems[0]?.name || 'Wkręt do drewna',
+          dimension: '',
+          scaleCode: '',
+          refNumber: '',
+          priceText: 'Cena',
+        });
+      }
+      setItems(padded);
+      setActivePage(0);
+    } else if (target === 'newPage') {
+      const needed = Math.max(7, Math.ceil(scannedItems.length / 7) * 7);
+      const padded = [...scannedItems];
+      while (padded.length < needed) {
+        padded.push({
+          id: `fiszka_pad_${Date.now()}_${padded.length}`,
+          name: scannedItems[0]?.name || 'Wkręt do drewna',
+          dimension: '',
+          scaleCode: '',
+          refNumber: '',
+          priceText: 'Cena',
+        });
+      }
+      setItems((prev) => [...prev, ...padded]);
+      setTimeout(() => {
+        const newPageIdx = Math.floor((items.length + padded.length - 1) / 7);
+        scrollToPage(newPageIdx);
+      }, 100);
+    } else {
+      const startIdx = activePage * 7;
+      setItems((prev) => {
+        const next = [...prev];
+        scannedItems.forEach((si, i) => {
+          const targetIdx = startIdx + i;
+          if (targetIdx < next.length) {
+            next[targetIdx] = {
+              ...next[targetIdx],
+              name: si.name,
+              dimension: si.dimension,
+              scaleCode: si.scaleCode,
+              refNumber: si.refNumber,
+              priceText: si.priceText,
+            };
+          }
+        });
+        return next;
+      });
+    }
+  };
+
   // Generowanie i pobranie PDF z aktualnymi danymi lub czystego
   const handleDownloadFilledPdf = async (empty = false) => {
     try {
@@ -470,6 +533,21 @@ export default function App() {
               <FileText className="w-4 h-4 text-emerald-600" />
               <span>Pobierz czysty szablon PDF</span>
             </button>
+
+            {/* Opcja 4: Skaner etykiet regałowych ESL (AI Vision) */}
+            <button
+              onClick={() => setIsEslModalOpen(true)}
+              className="w-full py-2 px-3 text-xs font-bold text-teal-900 bg-gradient-to-r from-teal-50 to-emerald-50 hover:from-teal-100 hover:to-emerald-100 border border-teal-300 rounded-xl flex items-center justify-between transition-all cursor-pointer shadow-2xs"
+              title="Zrób zdjęcie etykiety ESL (elektronicznej) lub wgraj z pliku - AI automatycznie odczyta dane na fiszki"
+            >
+              <div className="flex items-center gap-2">
+                <Camera className="w-4 h-4 text-teal-600" />
+                <span>Skanuj etykietę ESL (AI)</span>
+              </div>
+              <span className="text-[10px] bg-teal-600 text-white px-1.5 py-0.5 rounded-md font-bold">
+                Foto / Kamera
+              </span>
+            </button>
           </div>
 
           {/* Pasek statusu */}
@@ -510,6 +588,21 @@ export default function App() {
 
             {isBatchMenuOpen && (
               <div className="p-2.5 flex flex-col gap-1.5 border-t border-purple-100 bg-white">
+                {/* 0. Skaner ESL */}
+                <button
+                  onClick={() => setIsEslModalOpen(true)}
+                  className="w-full px-2.5 py-2 text-xs font-semibold text-teal-900 bg-teal-50 hover:bg-teal-100 rounded-lg border border-teal-200 flex items-center justify-between transition-all cursor-pointer"
+                  title="Odczytaj etykiety ESL ze zdjęcia lub kamery"
+                >
+                  <div className="flex items-center gap-1.5">
+                    <Camera className="w-4 h-4 text-teal-600" />
+                    <span>Skaner etykiet ESL (AI)</span>
+                  </div>
+                  <span className="text-[10px] bg-white text-teal-700 px-1 py-0.5 rounded border border-teal-200 font-mono">
+                    AI Foto
+                  </span>
+                </button>
+
                 {/* 1. Paste from Excel */}
                 <button
                   onClick={() => setIsExcelModalOpen(true)}
@@ -835,6 +928,18 @@ export default function App() {
             <Maximize2 className="w-3.5 h-3.5" />
             <span>Dopasuj do ekranu</span>
           </button>
+
+          <div className="h-4 w-px bg-slate-300 mx-0.5" />
+
+          {/* Szybki skrót: Skanuj etykietę ESL */}
+          <button
+            onClick={() => setIsEslModalOpen(true)}
+            className="px-2.5 py-1 text-xs font-bold rounded-lg border border-teal-300 bg-teal-50 hover:bg-teal-100 text-teal-900 flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
+            title="Skanuj elektroniczne etykiety cenowe ESL ze zdjęcia lub kamery"
+          >
+            <Camera className="w-3.5 h-3.5 text-teal-600" />
+            <span>Skanuj ESL</span>
+          </button>
         </div>
 
         <div className="flex flex-col items-center gap-6 w-full max-w-5xl pb-12">
@@ -984,6 +1089,14 @@ export default function App() {
         onApply={handleApplySeries}
         activePageIndex={activePage}
         totalPages={totalPages}
+      />
+
+      {/* MODAL 3: Skaner etykiet ESL (AI Vision) */}
+      <EslScannerModal
+        isOpen={isEslModalOpen}
+        onClose={() => setIsEslModalOpen(false)}
+        onApply={handleApplyEslItems}
+        activePageIndex={activePage}
       />
     </div>
   );
