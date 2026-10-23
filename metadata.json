@@ -1,6 +1,8 @@
 {
   "name": "Generator Fiszek Regałowych A4",
   "description": "Szablon i edytor fiszek regałowych 19.5 x 4 cm w formacie A4 z możliwością edycji nazwy, wymiaru, kodu wagi oraz wydrukiem.",
-  "requestFramePermissions": [],
+  "requestFramePermissions": [
+    "camera"
+  ],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

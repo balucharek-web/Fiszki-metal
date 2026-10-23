@@ -14,6 +14,9 @@ import {
   ArrowRight,
   Layers,
   HelpCircle,
+  VideoOff,
+  ShieldAlert,
+  Smartphone,
 } from 'lucide-react';
 import { FiszkaItem } from '../types/label';
 
@@ -51,7 +54,11 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
 
   // Camera state
   const videoRef = useRef<HTMLVideoElement>(null);
+  const nativeCameraInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [isCameraActive, setIsCameraActive] = useState(false);
+  const [isCameraStarting, setIsCameraStarting] = useState(false);
+  const [cameraPermissionDenied, setCameraPermissionDenied] = useState(false);
   const [availableDevices, setAvailableDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>('');
   const streamRef = useRef<MediaStream | null>(null);
@@ -62,6 +69,8 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
       stopCamera();
       setImagePreview(null);
       setErrorMsg(null);
+      setCameraPermissionDenied(false);
+      setIsCameraStarting(false);
       setRecognizedItems([]);
     }
   }, [isOpen]);
@@ -102,12 +111,20 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
       streamRef.current = null;
     }
     setIsCameraActive(false);
+    setIsCameraStarting(false);
   };
 
   const startCamera = async (deviceId?: string) => {
     stopCamera();
     setErrorMsg(null);
+    setCameraPermissionDenied(false);
+    setIsCameraStarting(true);
+
     try {
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+        throw new Error('Twoja przeglądarka nie obsługuje bezpośredniego strumienia wideo z kamery.');
+      }
+
       const constraints: MediaStreamConstraints = {
         video: deviceId
           ? { deviceId: { exact: deviceId }, width: { ideal: 1920 }, height: { ideal: 1080 } }
@@ -119,9 +136,14 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
 
       if (videoRef.current) {
         videoRef.current.srcObject = stream;
-        videoRef.current.play();
+        try {
+          await videoRef.current.play();
+        } catch {
+          // Play might be deferred by browser
+        }
       }
       setIsCameraActive(true);
+      setIsCameraStarting(false);
 
       // List video devices
       const devices = await navigator.mediaDevices.enumerateDevices();
@@ -131,11 +153,25 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
         setSelectedDeviceId(videoDevs[0].deviceId);
       }
     } catch (err: any) {
-      console.error('Błąd dostępu do kamery:', err);
-      setErrorMsg(
-        'Brak dostępu do kamery. Upewnij się, że zezwoliłeś przeglądarce na dostęp lub skorzystaj z opcji wgrania zdjęcia.'
-      );
+      console.warn('Błąd dostępu do kamery:', err);
       setIsCameraActive(false);
+      setIsCameraStarting(false);
+      const isDenied =
+        err?.name === 'NotAllowedError' ||
+        err?.name === 'PermissionDeniedError' ||
+        String(err?.message || '').toLowerCase().includes('permission') ||
+        String(err?.message || '').toLowerCase().includes('denied');
+
+      setCameraPermissionDenied(isDenied);
+      if (isDenied) {
+        setErrorMsg(
+          'Dostęp do kamery wideo został zablokowany przez przeglądarkę (Permission denied). Możesz natychmiast zrobić zdjęcie aparatem urządzenia poniżej lub wgrać plik ze zdjęciem.'
+        );
+      } else {
+        setErrorMsg(
+          err.message || 'Nie udało się uruchomić kamery. Użyj przycisku aparatu lub wgraj zdjęcie z dysku.'
+        );
+      }
     }
   };
 
@@ -413,85 +449,227 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
             </div>
           </div>
 
-          {/* OBSZAR KAMERY LUB UPLOADU */}
-          {activeTab === 'upload' && (
-            <div
-              onDrop={handleDrop}
-              onDragOver={(e) => e.preventDefault()}
-              className="border-2 border-dashed border-slate-300 hover:border-emerald-500 rounded-2xl p-6 flex flex-col items-center justify-center text-center bg-slate-50/70 hover:bg-emerald-50/20 transition-all cursor-pointer relative"
-              onClick={() => document.getElementById('esl-file-input')?.click()}
-            >
-              <input
-                id="esl-file-input"
-                type="file"
-                accept="image/*"
-                onChange={handleFileChange}
-                className="hidden"
-              />
+          {/* UKRYTE INPUTY PLIKÓW I NATIVE CAMERA */}
+          <input
+            ref={fileInputRef}
+            id="esl-file-input"
+            type="file"
+            accept="image/*"
+            onChange={handleFileChange}
+            className="hidden"
+          />
+          <input
+            ref={nativeCameraInputRef}
+            id="esl-native-camera-input"
+            type="file"
+            accept="image/*"
+            capture="environment"
+            onChange={handleFileChange}
+            className="hidden"
+          />
 
-              <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center mb-2 shadow-xs">
-                <ImageIcon className="w-6 h-6" />
+          {/* OBSZAR UPLOADU */}
+          {activeTab === 'upload' && (
+            <div className="flex flex-col gap-3">
+              <div
+                onDrop={handleDrop}
+                onDragOver={(e) => e.preventDefault()}
+                className="border-2 border-dashed border-slate-300 hover:border-emerald-500 rounded-2xl p-6 flex flex-col items-center justify-center text-center bg-slate-50/70 hover:bg-emerald-50/20 transition-all cursor-pointer relative"
+                onClick={() => fileInputRef.current?.click()}
+              >
+                <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center mb-2 shadow-xs">
+                  <ImageIcon className="w-6 h-6" />
+                </div>
+                <h4 className="font-bold text-sm text-slate-800 mb-1">
+                  Przeciągnij zdjęcie etykiety lub kliknij, aby wybrać z dysku
+                </h4>
+                <p className="text-xs text-slate-500 max-w-md mb-2">
+                  Możesz także wcisnąć <kbd className="px-1.5 py-0.5 bg-white border border-slate-300 rounded text-slate-700 font-mono text-[10px]">Ctrl + V</kbd> aby wkleić ze schowka
+                </p>
+
+                <div className="flex items-center gap-2 mt-2">
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      fileInputRef.current?.click();
+                    }}
+                    className="px-3 py-1.5 bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    <Upload className="w-3.5 h-3.5 text-slate-600" />
+                    <span>Przeglądaj pliki</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      nativeCameraInputRef.current?.click();
+                    }}
+                    className="px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    <Smartphone className="w-3.5 h-3.5 text-emerald-600" />
+                    <span>Zrób zdjęcie aparatem</span>
+                  </button>
+                </div>
               </div>
-              <h4 className="font-bold text-sm text-slate-800 mb-1">
-                Przeciągnij zdjęcie etykiety lub kliknij, aby wybrać z dysku
-              </h4>
-              <p className="text-xs text-slate-500 max-w-md">
-                Możesz także wcisnąć <kbd className="px-1.5 py-0.5 bg-white border border-slate-300 rounded text-slate-700 font-mono text-[10px]">Ctrl + V</kbd> aby wkleić zrzut ekranu lub skopiowane zdjęcie ze schowka
-              </p>
             </div>
           )}
 
+          {/* OBSZAR KAMERY */}
           {activeTab === 'camera' && (
             <div className="flex flex-col items-center gap-3 bg-slate-900 rounded-2xl p-3 border border-slate-800">
-              <div className="relative w-full max-w-lg aspect-4/3 bg-black rounded-xl overflow-hidden flex items-center justify-center">
-                <video
-                  ref={videoRef}
-                  autoPlay
-                  playsInline
-                  muted
-                  className="w-full h-full object-cover"
-                />
+              {isCameraActive ? (
+                <>
+                  <div className="relative w-full max-w-lg aspect-4/3 bg-black rounded-xl overflow-hidden flex items-center justify-center">
+                    <video
+                      ref={videoRef}
+                      autoPlay
+                      playsInline
+                      muted
+                      className="w-full h-full object-cover"
+                    />
 
-                {/* Siatka pomocnicza celownika etykiety ESL */}
-                <div className="absolute inset-8 border-2 border-dashed border-emerald-400/70 rounded-xl pointer-events-none flex flex-col justify-between p-3">
-                  <div className="flex justify-between items-center text-[11px] text-emerald-300 bg-black/50 backdrop-blur-xs px-2 py-0.5 rounded">
-                    <span>Etykieta ESL / Kod wagi</span>
-                    <span>19.5 x 4 cm</span>
+                    {/* Siatka pomocnicza celownika etykiety ESL */}
+                    <div className="absolute inset-8 border-2 border-dashed border-emerald-400/70 rounded-xl pointer-events-none flex flex-col justify-between p-3">
+                      <div className="flex justify-between items-center text-[11px] text-emerald-300 bg-black/50 backdrop-blur-xs px-2 py-0.5 rounded">
+                        <span>Etykieta ESL / Kod wagi</span>
+                        <span>19.5 x 4 cm</span>
+                      </div>
+                      <div className="text-center text-[10px] text-emerald-200 bg-black/50 backdrop-blur-xs py-0.5 px-2 rounded self-center">
+                        Umieść etykietę w kadrze i zrób zdjęcie
+                      </div>
+                    </div>
                   </div>
-                  <div className="text-center text-[10px] text-emerald-200 bg-black/50 backdrop-blur-xs py-0.5 px-2 rounded self-center">
-                    Umieść etykietę w kadrze i zrób zdjęcie
+
+                  {/* Przyciski kontroli kamery aktywnej */}
+                  <div className="flex items-center gap-3 flex-wrap justify-center">
+                    {availableDevices.length > 1 && (
+                      <select
+                        value={selectedDeviceId}
+                        onChange={(e) => {
+                          setSelectedDeviceId(e.target.value);
+                          startCamera(e.target.value);
+                        }}
+                        className="px-2.5 py-1.5 text-xs bg-slate-800 text-slate-200 border border-slate-700 rounded-lg cursor-pointer"
+                      >
+                        {availableDevices.map((dev, idx) => (
+                          <option key={dev.deviceId} value={dev.deviceId}>
+                            {dev.label || `Kamera ${idx + 1}`}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+
+                    <button
+                      onClick={captureCameraPhoto}
+                      disabled={isScanning}
+                      className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold text-xs rounded-xl flex items-center gap-2 shadow-lg transition-all cursor-pointer"
+                    >
+                      <Camera className="w-4 h-4" />
+                      <span>Zrób zdjęcie i odczytaj</span>
+                    </button>
+
+                    <button
+                      onClick={() => nativeCameraInputRef.current?.click()}
+                      className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs rounded-xl flex items-center gap-1.5 transition-all cursor-pointer border border-slate-700"
+                      title="Użyj natywnego aparatu urządzenia (wyższa rozdzielczość)"
+                    >
+                      <Smartphone className="w-3.5 h-3.5" />
+                      <span>Aparat natywny</span>
+                    </button>
                   </div>
+                </>
+              ) : (
+                <div className="w-full max-w-lg aspect-4/3 bg-slate-950 rounded-xl border border-slate-800 flex flex-col items-center justify-center p-6 text-center">
+                  {isCameraStarting ? (
+                    <div className="flex flex-col items-center gap-3">
+                      <RefreshCw className="w-8 h-8 text-emerald-400 animate-spin" />
+                      <p className="text-sm font-semibold text-slate-200">
+                        Uruchamianie kamery...
+                      </p>
+                      <p className="text-xs text-slate-400">
+                        Zezwól na dostęp do aparatu w wyskakującym okienku przeglądarki
+                      </p>
+                    </div>
+                  ) : cameraPermissionDenied ? (
+                    <div className="flex flex-col items-center gap-3 max-w-sm">
+                      <div className="w-12 h-12 rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center justify-center">
+                        <ShieldAlert className="w-6 h-6" />
+                      </div>
+                      <h4 className="font-bold text-sm text-white">
+                        Dostęp do wideo zablokowany (Permission denied)
+                      </h4>
+                      <p className="text-xs text-slate-300 leading-relaxed">
+                        Przeglądarka zablokowała bezpośredni podgląd wideo. Możesz od razu wykonać zdjęcie aparatem urządzenia bez konfigurowania uprawnień:
+                      </p>
+
+                      <div className="flex flex-col sm:flex-row gap-2 w-full pt-1">
+                        <button
+                          type="button"
+                          onClick={() => nativeCameraInputRef.current?.click()}
+                          className="flex-1 px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-2 shadow-lg transition-all cursor-pointer"
+                        >
+                          <Camera className="w-4 h-4" />
+                          <span>Zrób zdjęcie aparatem</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => fileInputRef.current?.click()}
+                          className="px-3.5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer border border-slate-700"
+                        >
+                          <Upload className="w-4 h-4" />
+                          <span>Wgraj plik</span>
+                        </button>
+                      </div>
+
+                      <div className="flex items-center gap-2 pt-2">
+                        <button
+                          type="button"
+                          onClick={() => startCamera()}
+                          className="text-[11px] text-slate-400 hover:text-emerald-400 underline flex items-center gap-1 cursor-pointer"
+                        >
+                          <RefreshCw className="w-3 h-3" />
+                          <span>Ponów próbę włączenia podglądu na żywo</span>
+                        </button>
+                      </div>
+
+                      <p className="text-[10px] text-slate-500 pt-1">
+                        Wskazówka: aby odblokować podgląd na żywo, kliknij kłódkę/ikonę uprawnień w pasku adresu przeglądarki i ustaw Aparat na „Zezwalaj”.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center gap-3">
+                      <div className="w-12 h-12 rounded-full bg-slate-800 text-slate-400 flex items-center justify-center">
+                        <VideoOff className="w-6 h-6" />
+                      </div>
+                      <h4 className="font-bold text-sm text-white">
+                        Kamera jest wyłączona
+                      </h4>
+                      <p className="text-xs text-slate-400 max-w-xs">
+                        Włącz podgląd wideo na żywo lub wykonaj zdjęcie natywnym aparatem
+                      </p>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => startCamera()}
+                          className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl flex items-center gap-1.5 shadow-md cursor-pointer"
+                        >
+                          <Camera className="w-4 h-4" />
+                          <span>Włącz podgląd kamery</span>
+                        </button>
+                        <button
+                          onClick={() => nativeCameraInputRef.current?.click()}
+                          className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-xl flex items-center gap-1.5 border border-slate-700 cursor-pointer"
+                        >
+                          <Smartphone className="w-4 h-4 text-emerald-400" />
+                          <span>Aparat systemowy</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
                 </div>
-              </div>
-
-              {/* Przyciski kontroli kamery */}
-              <div className="flex items-center gap-3">
-                {availableDevices.length > 1 && (
-                  <select
-                    value={selectedDeviceId}
-                    onChange={(e) => {
-                      setSelectedDeviceId(e.target.value);
-                      startCamera(e.target.value);
-                    }}
-                    className="px-2.5 py-1.5 text-xs bg-slate-800 text-slate-200 border border-slate-700 rounded-lg cursor-pointer"
-                  >
-                    {availableDevices.map((dev, idx) => (
-                      <option key={dev.deviceId} value={dev.deviceId}>
-                        {dev.label || `Kamera ${idx + 1}`}
-                      </option>
-                    ))}
-                  </select>
-                )}
-
-                <button
-                  onClick={captureCameraPhoto}
-                  disabled={!isCameraActive || isScanning}
-                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold text-xs rounded-xl flex items-center gap-2 shadow-lg transition-all cursor-pointer"
-                >
-                  <Camera className="w-4 h-4" />
-                  <span>Zrób zdjęcie i odczytaj</span>
-                </button>
-              </div>
+              )}
             </div>
           )}
 
