@@ -157,24 +157,16 @@ export async function generateFillablePdf(
         color: rgb(1, 1, 1),
       });
 
-      // 2. Left Section: STANDERS Logo (nieco mniejsze, 4.9 cm szerokości)
+      // 2. Left Section: STANDERS Logo (powiększone, bez pionowej linii dzielącej)
       const logoAreaWidth = 49 * MM_TO_PT;
       if (embeddedLogo) {
         page.drawImage(embeddedLogo, {
-          x: xLeft + ((49 - 32) / 2) * MM_TO_PT,
-          y: yBottom + 10 * MM_TO_PT,
-          width: 32 * MM_TO_PT,
-          height: 20 * MM_TO_PT,
+          x: xLeft + ((49 - 37) / 2) * MM_TO_PT,
+          y: yBottom + 8.5 * MM_TO_PT,
+          width: 37 * MM_TO_PT,
+          height: 23 * MM_TO_PT,
         });
       }
-
-      // Pionowa linia podziału po sekcji logo (przy 4.9 cm)
-      page.drawLine({
-        start: { x: xLeft + logoAreaWidth, y: yBottom },
-        end: { x: xLeft + logoAreaWidth, y: yBottom + labelHeight },
-        color: rgb(0.88, 0.88, 0.88),
-        thickness: 0.5,
-      });
 
       // 3. Middle Section: przesunięty o 5mm w lewo
       const middleX = xLeft + logoAreaWidth + 2 * MM_TO_PT;
@@ -236,10 +228,10 @@ export async function generateFillablePdf(
       }
       attachAutoClearAction(dimField, `wymiar_${globalIdx + 1}`);
 
-      // Row 3: Zaokrąglony zielony pasek (zmniejszony o 5mm do 69mm, przesunięty w lewo)
+      // Row 3: Zaokrąglony zielony pasek (zwiększony o 5mm do 74mm)
       const badgeX = middleX;
       const badgeY = yBottom + 1.8 * MM_TO_PT;
-      const badgeWidth = 69 * MM_TO_PT; // zmniejszone o 5mm do 69mm
+      const badgeWidth = 74 * MM_TO_PT; // zwiększone o 5mm do 74mm
       const badgeHeight = 12.2 * MM_TO_PT;
       const badgeR = 2.5 * MM_TO_PT;
       const greenColor = rgb(0.843, 0.961, 0.773);
@@ -255,9 +247,9 @@ export async function generateFillablePdf(
 
       // "Wpisz na wadze:" - pojedynczy, czysty, ostry napis
       page.drawText('Wpisz na wadze:', {
-        x: badgeX + 2.8 * MM_TO_PT,
+        x: badgeX + 3 * MM_TO_PT,
         y: badgeY + 4.2 * MM_TO_PT,
-        size: 13,
+        size: 13.5,
         font: boldFont,
         color: rgb(0, 0, 0),
       });
@@ -269,16 +261,16 @@ export async function generateFillablePdf(
       }
       scaleField.setAlignment(TextAlignment.Right);
       scaleField.addToPage(page, {
-        x: badgeX + badgeWidth - 30 * MM_TO_PT,
+        x: badgeX + badgeWidth - 32 * MM_TO_PT,
         y: badgeY + 0.8 * MM_TO_PT,
-        width: 28 * MM_TO_PT,
+        width: 30 * MM_TO_PT,
         height: 11.2 * MM_TO_PT,
         borderWidth: 0,
         font: boldFont,
       });
-      scaleField.setFontSize(27);
+      scaleField.setFontSize(28);
       scaleField.acroField.setDefaultAppearance(
-        customFontBold ? '/LMSBold 27 Tf 0 0 0 rg' : '/Helvetica-Bold 27 Tf 0 0 0 rg'
+        customFontBold ? '/LMSBold 28 Tf 0 0 0 rg' : '/Helvetica-Bold 28 Tf 0 0 0 rg'
       );
 
       const scaleWidget = scaleField.acroField.getWidgets()[0];

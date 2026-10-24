@@ -68,15 +68,15 @@ export const FiszkaCard: React.FC<FiszkaCardProps> = ({
         </span>
       )}
 
-      {/* 1. LEFT SECTION: Logo STANDERS (nieco mniejsze, 4.9 cm szerokości) */}
+      {/* 1. LEFT SECTION: Logo STANDERS (powiększone, bez pionowej linii dzielącej) */}
       <div
-        className="flex items-center justify-center px-[3mm] py-[2mm] bg-white shrink-0 select-none h-full border-r border-slate-200"
+        className="flex items-center justify-center px-[3mm] py-[2mm] bg-white shrink-0 select-none h-full"
         style={{ width: '49mm', minWidth: '49mm', maxWidth: '49mm' }}
       >
         <img
           src="./assets/standers_logo_transparent.png"
           alt="STANDERS"
-          className="max-h-[22mm] max-w-[36mm] object-contain select-none"
+          className="max-h-[28mm] max-w-[43mm] object-contain select-none"
         />
       </div>
 
@@ -150,13 +150,13 @@ export const FiszkaCard: React.FC<FiszkaCardProps> = ({
           )}
         </div>
 
-        {/* Row 3: Zielony pasek (szerokość zmniejszona o 5mm do 69mm, przesunięty w lewo) */}
+        {/* Row 3: Zielony pasek (zwiększony o 5mm do 74mm) */}
         <div
-          className="flex items-center justify-between rounded-lg px-[2.8mm] py-[1mm]"
+          className="flex items-center justify-between rounded-lg px-[3mm] py-[1mm]"
           style={{
-            width: '69mm',
-            minWidth: '69mm',
-            maxWidth: '69mm',
+            width: '74mm',
+            minWidth: '74mm',
+            maxWidth: '74mm',
             backgroundColor: settings.badgeColor || '#d7f5c5',
             minHeight: '12.2mm',
             maxHeight: '12.8mm',
@@ -166,7 +166,7 @@ export const FiszkaCard: React.FC<FiszkaCardProps> = ({
             <span
               className="text-black tracking-tight"
               style={{
-                fontSize: '4.2mm',
+                fontSize: '4.4mm',
                 fontFamily: "'Leroy Merlin Sans', sans-serif",
                 fontWeight: 800,
               }}
