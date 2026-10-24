@@ -247,30 +247,51 @@ export function parseEslOcrText(rawText: string): OcrRecognizedLabel {
     }
   }
 
-  // 5. Rozmiar / wymiar (np. 6X90 MM, 4X12, 5X24, 4x40 mm, M6x30)
+  // 5. Rozmiar / wymiar (np. 5X40 MM, 6X90 MM, 4X12, 5X24, 4x40 mm, M6x30, 4,5x50)
   for (const line of lines) {
-    const dimMatch = line.match(/\b([1-9][0-9]?(?:[\.,][0-9]+)?\s*[xX*]\s*[0-9]+(?:[\.,][0-9]+)?(?:\s*mm)?)\b/i);
-    if (dimMatch) {
-      dimension = dimMatch[1].replace(/\s+/g, '').replace('*', 'x').toLowerCase();
-      if (!dimension.endsWith('mm') && !dimension.startsWith('m')) {
-        dimension += ' mm';
-      }
+    if (line.includes('zł') || line.includes('zl')) continue;
+    const dimMatch = line.match(/(?:^|[\s\.\:\-\|]+)([1-9][0-9]?(?:[\.,][0-9]+)?\s*[xX*]\s*[0-9]+(?:[\.,][0-9]+)?(?:\s*mm)?)(?:$|[\s\.\:\-\|]+)/i);
+    if (dimMatch && dimMatch[1]) {
+      const cleanDim = dimMatch[1].replace(/\s+/g, '').replace('*', 'x').toLowerCase();
+      dimension = cleanDim.replace(/mm$/i, '').trim() + ' mm';
       break;
     }
   }
 
-  // Dodatkowy fallback na wymiar typu "6X90", "4X12", "5X24"
+  // Dodatkowy fallback na wymiar typu "6X90", "4X12", "5X24", "5x40 mm"
   if (!dimension) {
-    const fallbackDim = rawText.match(/\b([0-9]{1,2}\s*[xX*]\s*[0-9]{1,3})\b/i);
-    if (fallbackDim) {
-      dimension = fallbackDim[1].toLowerCase().replace(/\s+/g, '').replace('*', 'x') + ' mm';
+    const fallbackDim = rawText.match(/\b([1-9][0-9]?(?:[\.,][0-9]+)?\s*[xX*]\s*[0-9]+(?:[\.,][0-9]+)?(?:\s*mm)?)\b/i);
+    if (fallbackDim && fallbackDim[1]) {
+      const cleanDim = fallbackDim[1].toLowerCase().replace(/\s+/g, '').replace('*', 'x');
+      dimension = cleanDim.replace(/mm$/i, '').trim() + ' mm';
     }
   }
 
   // 6. Cena (np. 38,49 zł/kg, 62,49 zł/kg)
-  const priceMatch = rawText.match(/\b([0-9]{1,3})[\.,\s]([0-9]{2})\s*(?:zł(?:\/kg)?)?/i);
-  if (priceMatch && parseInt(priceMatch[1], 10) >= 1) {
-    priceText = `${priceMatch[1]},${priceMatch[2]} zł/kg`;
+  // Ignorujemy linie z ZAPAS (stan magazynowy nie może być brany za cenę)
+  const nonZapasLines = lines.filter((l) => !/ZAPAS/i.test(l));
+  let foundPrice = '';
+
+  for (const line of nonZapasLines) {
+    const p1 = line.match(/\b([1-9][0-9]{0,2})[\.,\s]([0-9]{2})\s*(?:zł(?:\/kg)?|z\s*ran|zl)/i);
+    if (p1) {
+      foundPrice = `${p1[1]},${p1[2]} zł/kg`;
+      break;
+    }
+  }
+
+  if (!foundPrice) {
+    for (const line of nonZapasLines) {
+      const p2 = line.match(/\b([1-9][0-9]{0,2})[\.,]([0-9]{2})\b/);
+      if (p2 && parseInt(p2[1], 10) >= 2) {
+        foundPrice = `${p2[1]},${p2[2]} zł/kg`;
+        break;
+      }
+    }
+  }
+
+  if (foundPrice) {
+    priceText = foundPrice;
   }
 
   // Normalizacja nazwy
@@ -442,20 +463,24 @@ export async function scanEslWithClientOcr(
     const origW = img.naturalWidth || img.width;
     const origH = img.naturalHeight || img.height;
 
-    // Canvas 1: Całe zdjęcie z podbiciem kontrastu i pogrubieniem cienkich znaków
-    const canvas = document.createElement('canvas');
-    const maxDim = 1600;
-    let w = origW;
-    let h = origH;
+    // Canvas 1: Inteligentny kadr dla zdjęć pionowych (9:16 / 3:4) ze smartfona
+    // Gdy użytkownik fotografuje etykietę, znajduje się ona w centralnym pasie kadru.
+    // Odcięcie góry (śrubki w pojemniku) i dołu (dolna półka) powiększa napisy na etykiecie 2,5x,
+    // dzięki czemu czcionka osiąga optymalną wysokość 35-50 px dla silnika OCR!
+    const isTallPortrait = origH > origW * 1.25;
+    const srcX = isTallPortrait ? Math.round(origW * 0.03) : 0;
+    const srcY = isTallPortrait ? Math.round(origH * 0.22) : 0;
+    const srcW = isTallPortrait ? Math.round(origW * 0.94) : origW;
+    const srcH = isTallPortrait ? Math.round(origH * 0.42) : origH;
 
-    if (w > maxDim || h > maxDim) {
-      if (w > h) {
-        h = Math.round((h * maxDim) / w);
-        w = maxDim;
-      } else {
-        w = Math.round((w * maxDim) / h);
-        h = maxDim;
-      }
+    const canvas = document.createElement('canvas');
+    const maxDim = 1800;
+    let w = srcW;
+    let h = srcH;
+
+    if (w > maxDim) {
+      h = Math.round((h * maxDim) / w);
+      w = maxDim;
     }
 
     canvas.width = w;
@@ -463,7 +488,7 @@ export async function scanEslWithClientOcr(
     const ctx = canvas.getContext('2d');
     if (!ctx) return null;
 
-    ctx.drawImage(img, 0, 0, w, h);
+    ctx.drawImage(img, srcX, srcY, srcW, srcH, 0, 0, w, h);
 
     // Zaawansowane podbicie kontrastu dla słabego światła i e-papieru
     try {
