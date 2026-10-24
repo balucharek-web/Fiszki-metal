@@ -80,9 +80,9 @@ export const FiszkaCard: React.FC<FiszkaCardProps> = ({
         />
       </div>
 
-      {/* 2. MIDDLE SECTION: Nazwa (na równo z logo), Wymiar (od razu nad paskiem wagi), Pasek wagi (Leroy Merlin Sans Bold) */}
-      <div className="flex-1 flex flex-col justify-between px-[3.5mm] pt-[4.2mm] pb-[1.8mm] overflow-hidden h-full">
-        {/* Row 1: Product Name ("Wkręt do drewna") - na wysokości logo Standers */}
+      {/* 2. MIDDLE SECTION: Nazwa (nieco niżej), Wymiar (od razu nad paskiem wagi), Pasek wagi (ekstra pogrubiony numer) */}
+      <div className="flex-1 flex flex-col justify-between px-[3.5mm] pt-[5.8mm] pb-[1.8mm] overflow-hidden h-full">
+        {/* Row 1: Product Name ("Wkręt do drewna") - nieco niżej */}
         <div className="w-full">
           {!isPrintMode ? (
             <input
@@ -152,7 +152,7 @@ export const FiszkaCard: React.FC<FiszkaCardProps> = ({
             )}
           </div>
 
-          {/* Row 3: Zielony pasek (czcionka Leroy Merlin Sans Bold dla napisu i numeru) */}
+          {/* Row 3: Zielony pasek (czcionka Leroy Merlin Sans Bold dla napisu i ekstra pogrubiony numer) */}
           <div
             className="flex items-center justify-between rounded-lg px-[3mm] py-[1mm]"
             style={{
@@ -188,10 +188,12 @@ export const FiszkaCard: React.FC<FiszkaCardProps> = ({
                   placeholder="247"
                   className="w-full text-right text-black bg-transparent border-b border-transparent hover:border-slate-500 focus:border-black focus:bg-white/40 focus:outline-none px-1 rounded-xs tracking-tight tabular-nums"
                   style={{
-                    fontSize: '9mm',
+                    fontSize: '9.2mm',
                     lineHeight: 1,
                     fontFamily: "'Leroy Merlin Sans', sans-serif",
-                    fontWeight: 700,
+                    fontWeight: 900,
+                    WebkitTextStroke: '0.45px currentColor',
+                    textShadow: '0.25px 0 0 currentColor, -0.25px 0 0 currentColor',
                   }}
                   title="Kliknij, aby zmienić numer na wadze (czyści się automatycznie)"
                 />
@@ -199,10 +201,12 @@ export const FiszkaCard: React.FC<FiszkaCardProps> = ({
                 <span
                   className="text-black text-right tracking-tight tabular-nums px-1"
                   style={{
-                    fontSize: '9mm',
+                    fontSize: '9.2mm',
                     lineHeight: 1,
                     fontFamily: "'Leroy Merlin Sans', sans-serif",
-                    fontWeight: 700,
+                    fontWeight: 900,
+                    WebkitTextStroke: '0.45px currentColor',
+                    textShadow: '0.25px 0 0 currentColor, -0.25px 0 0 currentColor',
                   }}
                 >
                   {item.scaleCode || '247'}

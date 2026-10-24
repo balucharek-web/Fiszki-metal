@@ -172,7 +172,7 @@ export async function generateFillablePdf(
       const middleX = xLeft + logoAreaWidth + 2 * MM_TO_PT;
       const middleWidth = (195 - 49 - 60 - 3) * MM_TO_PT;
 
-      // Row 1: Nazwa towaru (np. "Wkręt do drewna") - obniżona do wysokości logo Standers
+      // Row 1: Nazwa towaru (np. "Wkręt do drewna") - jeszcze trochę niżej
       const nameField = form.createTextField(`fiszka_${globalIdx + 1}_nazwa`);
       if (item.name) {
         nameField.setText(item.name);
@@ -180,7 +180,7 @@ export async function generateFillablePdf(
       nameField.setAlignment(TextAlignment.Left);
       nameField.addToPage(page, {
         x: middleX,
-        y: yBottom + 22.5 * MM_TO_PT,
+        y: yBottom + 20.8 * MM_TO_PT,
         width: middleWidth,
         height: 9.5 * MM_TO_PT,
         borderWidth: 0,
@@ -254,7 +254,7 @@ export async function generateFillablePdf(
         color: rgb(0, 0, 0),
       });
 
-      // Numer na wadze - pogrubiony, duży w czcionce Leroy Merlin Sans Bold
+      // Numer na wadze - ekstra pogrubiony w czcionce Leroy Merlin Sans Bold
       const scaleField = form.createTextField(`fiszka_${globalIdx + 1}_waga`);
       if (item.scaleCode) {
         scaleField.setText(String(item.scaleCode));
@@ -270,7 +270,7 @@ export async function generateFillablePdf(
       });
       scaleField.setFontSize(28);
       scaleField.acroField.setDefaultAppearance(
-        customFontBold ? '/LMSBold 28 Tf 0 0 0 rg' : '/Helvetica-Bold 28 Tf 0 0 0 rg'
+        customFontBold ? '/LMSBold 28 Tf 2 Tr 0.45 w 0 0 0 RG 0 0 0 rg' : '/Helvetica-Bold 28 Tf 0 0 0 rg'
       );
 
       const scaleWidget = scaleField.acroField.getWidgets()[0];
