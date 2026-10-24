@@ -10,457 +10,408 @@ export interface OcrRecognizedLabel {
 }
 
 /**
- * Czyści i normalizuje surowy tekst OCR:
- * - Rozdziela sklejone litery i cyfry (np. "UNIWERSALNY5X40 MM" -> "UNIWERSALNY 5X40 MM")
- * - Usuwa przyklejone znaki interpunkcyjne przed kodami (np. ":B2165183" -> "B2165183", "=5901171215451" -> "5901171215451")
- * - Standaryzuje znaki mnożenia wymiaru (*, × -> x)
+ * Czyści surowy tekst OCR z artefaktów skanowania.
  */
-export function normalizeOcrRawText(t: string): string {
-  if (!t) return '';
-  let res = t.replace(/[|—_~`\\\/]/g, ' ');
-
-  // 1. Zastąp znaki interpunkcyjne przylepione do liter lub cyfr (:B2165183 -> B2165183, =590... -> 590...)
-  res = res.replace(/[:=#*+]/g, ' ');
-
-  // 2. Oddziel litery od cyfr gdy są sklejone, np. UNIWERSALNY5X40 -> UNIWERSALNY 5X40
-  // Wykluczamy literę 'M' lub 'm' tuż przed cyfrą, aby nie psuć M6, M8, M10 itp.
-  res = res.replace(/([A-LN-Za-ln-zĄ-ź]{2,})([0-9])/g, '$1 $2');
-  res = res.replace(/([0-9])([A-LN-Za-ln-zĄ-ź]{2,})/g, '$1 $2');
-
-  // 3. Standaryzacja znaku wymiaru
-  res = res.replace(/([0-9])\s*[xX*×]\s*([0-9A-Za-z])/g, '$1x$2');
-
-  // 4. Redukcja wielokrotnych spacji
-  res = res.replace(/[ \t]+/g, ' ');
-
-  return res;
+function cleanOcrText(t: string): string {
+  return t
+    .replace(/[|—_~`\\\/]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
 }
 
 /**
- * Słownikowa rekonstrukcja nazw artykułów metalowych (Standers, Leroy Merlin, Castorama).
- * Rozpoznaje zniekształcone przez odblaski i kąt litery i przywraca 100% poprawną nazwę.
+ * Koryguje częste zamiany cyfr na litery w druku igłowym/e-papierze:
+ * B->8, I/l/|/!->1, O->0, S->5, Z->2, G/q->9, A->4
  */
-export function matchFastenerName(rawText: string): string {
-  const upper = rawText.toUpperCase();
+export function healDigitString(str: string): string {
+  if (!str) return '';
+  const converted = str
+    .toUpperCase()
+    .replace(/O/g, '0')
+    .replace(/[IL|!]/g, '1')
+    .replace(/B/g, '8')
+    .replace(/S/g, '5')
+    .replace(/Z/g, '2')
+    .replace(/G|Q/g, '9')
+    .replace(/^A(?=\d{6,7})/i, '4'); // np. A4813216 -> 44813216
 
-  // 1. Wkręty uniwersalne (w tym typowe błędy OCR: "T UNIWERSALNY", "WKRETY UNIWERSA", "W UNIWERS")
-  if (
-    /UNIWERSAL|UNIWERSA|T\s*UNIWERS|W\s*UNIWERS|WKRET.*UNIW|WKRETY.*UNIW/i.test(upper)
-  ) {
-    return 'Wkręt uniwersalny';
-  }
-
-  // 2. Wkręty do drewna
-  if (/DREWN|DO\s*DR|WKRET.*DREWN|WKRETY.*DREWN/i.test(upper)) {
-    return 'Wkręt do drewna';
-  }
-
-  // 3. Kołki do płyt G-K Molly (błędy OCR: "KLIMA", "MOLY", "GK MOLLY")
-  if (/MOLLY|MOLY|KLIMA|G-K\s*MOLLY|GK\s*MOLLY|KOLKI.*MOLLY|KOŁKI.*MOLLY/i.test(upper)) {
-    return 'Kołki do G-K Molly';
-  }
-
-  // 4. Wkręty do metalu / blachowkręty
-  if (/BLACH|DO\s*METAL|SAMOWIERC|BLACHOWKRET/i.test(upper)) {
-    return 'Wkręt do metalu';
-  }
-
-  // 5. Wkręty do płyt G-K
-  if (/GIPS|KARTON|G-K|PŁYT\s*G-K|PLYT\s*G-K/i.test(upper) && !/MOLLY/i.test(upper)) {
-    return 'Wkręt do płyt G-K';
-  }
-
-  // 6. Kołki szybkiego montażu
-  if (/SZYBKIEGO|SZYBKI|SM\b|MONTAZU|MONTAŻU/i.test(upper)) {
-    return 'Kołki szybkiego montażu';
-  }
-
-  // 7. Kołki rozporowe uniwersalne
-  if (/ROZPOR|KOLKI\s*ROZ|KOŁKI\s*ROZ/i.test(upper)) {
-    return 'Kołki rozporowe';
-  }
-
-  // 8. Śruby sześciokątne
-  if (/SRUB|ŚRUB|SZESC|SZEŚĆ|DIN\s*933|DIN\s*931/i.test(upper)) {
-    return 'Śruba z łbem sześciokątnym';
-  }
-
-  // 9. Śruby zamkowe
-  if (/ZAMKOW|DIN\s*603/i.test(upper)) {
-    return 'Śruba zamkowa';
-  }
-
-  // 10. Nakrętki sześciokątne
-  if (/NAKRET|NAKRĘT|DIN\s*934/i.test(upper)) {
-    return 'Nakrętka sześciokątna';
-  }
-
-  // 11. Podkładki powiększone
-  if (/PODKLAD|PODKŁAD|POWIEKSZ|POWIĘKSZ|DIN\s*9021/i.test(upper)) {
-    return 'Podkładka powiększona';
-  }
-
-  // 12. Podkładki sprężyste
-  if (/SPREZYS|SPRĘŻYS|DIN\s*127/i.test(upper)) {
-    return 'Podkładka sprężysta';
-  }
-
-  // 13. Kotwy
-  if (/KOTWA|TULEJ/i.test(upper)) {
-    return 'Kotwa stalowa';
-  }
-
-  // 14. Gwoździe
-  if (/GWOZD|GWÓŹD/i.test(upper)) {
-    return 'Gwóźdź budowlany';
-  }
-
-  return '';
+  return /^\d{7,8}$/.test(converted) ? converted : '';
 }
 
 /**
- * Precyzyjna ekstrakcja wymiaru śruby/wkrętu (np. 5x40 mm, 6x90 mm, 4x12 mm, M6x50).
- * Działa niezależnie od sklejenia liter z cyframi i koryguje typowe zniekształcenia OCR matrycy e-ink.
+ * Niezawodny ekstraktor numeru referencyjnego Leroy Merlin (LM):
+ * 1. Wykrywa numery 8- i 7-cyfrowe (np. 44813216, 99146892, 42660250)
+ * 2. Łączy grupy 4+4 cyfry rozdzielone spacją ("4481 3216" -> "44813216")
+ * 3. Wyszukuje numer linijkę nad słowem "ZAPAS" (układ na etykiecie ESL)
+ * 4. Obsługuje przedrostki REF:, LM, ART, KOD
+ * 5. Wykonuje sliding-window z korektą liter (44B13216 -> 44813216)
  */
-export function extractDimension(rawText: string): string {
-  const normalized = normalizeOcrRawText(rawText);
+export function extractLmReferenceNumber(rawText: string, ignoredEan = ''): string {
+  if (!rawText) return '';
 
-  // Poprawka częstych błędów w znakach wymiaru (np. "6XS0" -> "6x90")
-  const fixedText = normalized.replace(/([0-9]+)\s*[xX*×]\s*([0-9A-Za-z]+)/g, (_m, d1, d2) => {
-    const fixedD2 = d2
-      .replace(/[Ss]/g, '9')
-      .replace(/[OoQq]/g, '0')
-      .replace(/[Bb]/g, '8');
-    return `${d1}x${fixedD2}`;
-  });
+  const isValidRef = (cand: string) => {
+    if (!cand) return false;
+    if (ignoredEan && ignoredEan.includes(cand)) return false;
+    if (cand.startsWith('147') && cand.length >= 8) return false; // Hardware ID tagu
+    return cand.length >= 7 && cand.length <= 8;
+  };
 
-  // Wzorzec wymiaru: np. 5x40 mm, 6x90 mm, 4.5x50 mm, 3.5x25
-  const dimMatch = fixedText.match(
-    /(?:^|[^\d\.])([1-9][0-9]?(?:[\.,][0-9]+)?\s*x\s*[0-9]+(?:[\.,][0-9]+)?(?:\s*mm)?)(?:[^\d]|$)/i
-  );
-
-  if (dimMatch) {
-    let clean = dimMatch[1].replace(/\s+/g, '').replace('*', 'x').replace('×', 'x').toLowerCase();
-    // Uprość 5.0x60 -> 5x60
-    clean = clean.replace(/\.0(?=x)/, '').replace(/,0(?=x)/, '');
-    clean = clean.replace(/mm$/i, '').trim();
-    if (!clean.startsWith('m')) {
-      clean += ' mm';
-    }
-    return clean;
+  // Wzorzec 1: Bezpośrednio przed lub nad słowem "ZAPAS" (układ etykiety ESL)
+  const zapasMatch = rawText.match(/([0-9A-Za-z|!]{7,8})\s*(?:\n|\r|\s)+ZAPAS/i);
+  if (zapasMatch && zapasMatch[1]) {
+    const healed = healDigitString(zapasMatch[1]);
+    if (isValidRef(healed)) return healed;
   }
 
-  // Wymiary metryczne M6x50, M8x100 itp.
-  const metric = fixedText.match(/(?:^|[^\w])(M[0-9]{1,2}(?:\s*[xX*×]\s*[0-9]+)?(?:\s*mm)?)(?:[^\w]|$)/i);
-  if (metric) {
-    let clean = metric[1].replace(/\s+/g, '').toLowerCase();
-    clean = clean.replace(/mm$/i, '').trim() + ' mm';
-    return clean;
+  // Wzorzec 2: Z przedrostkiem REF / LM / ART / KOD / INDEX
+  const prefixMatch = rawText.match(/(?:REF|LM|ART|KOD|INDEX|NR)\s*[:\.\-]?\s*([0-9A-Za-z|!\s]{7,10})/i);
+  if (prefixMatch && prefixMatch[1]) {
+    const compact = prefixMatch[1].replace(/[\s\.\-]/g, '');
+    const healed = healDigitString(compact);
+    if (isValidRef(healed)) return healed;
   }
 
-  return '';
-}
-
-/**
- * Precyzyjna ekstrakcja kodu wagi ze sklepu (liczba 2- lub 3-cyfrowa).
- * W Leroy Merlin kod wagi ZAWSZE poprzedza nazwę artykułu (np. "155 WKRĘT UNIWERSALNY", "169 WKRĘT", "246 WKRĘT DO DREWNA").
- * Jeśli z powodu ramki lub odblasku pojawi się dodatkowa cyfra (np. "4155 WKRĘT"), pobieramy ostatnie 3 cyfry ("155").
- */
-export function extractScaleCode(rawText: string, detectedName: string, dimension: string): string {
-  const norm = normalizeOcrRawText(rawText);
-
-  // 1. NAJWYŻSZY PRIORYTET: Liczba 2-4 cyfrowa bezpośrednio przed nazwą artykułu / słowem kluczowym
-  // np. "155 WKRĘT", "4155 WKRĘT UNIWERSALNY", "169 WKRET", "246 DREWN", "980 MOLLY"
-  const keywordMatch = norm.match(
-    /(?:^|\s|\D)([0-9]{2,4})\s*(?:WKRET|WKRĘT|UNIWER|DREWN|KOLK|KOŁK|MOLLY|SRUB|ŚRUB|NAKRET|NAKRĘT|PODKLAD|PODKŁAD|BLACH|GWÓŹD|GWOZD)/i
-  );
-  if (keywordMatch) {
-    const rawCode = keywordMatch[1];
-    if (rawCode.length === 4) {
-      // 4 cyfry w kadrze z powodu ramki/glare (np. 4155 -> 155)
-      return rawCode.slice(-3);
-    }
-    if (rawCode.length === 2 || rawCode.length === 3) {
-      return rawCode;
+  // Wzorzec 3: Dwie grupy 4-cyfrowe rozdzielone spacją lub myślnikiem ("4481 3216" lub "4481-3216")
+  const splitGroupMatch = rawText.match(/\b([0-9A-Za-z]{4})[\s\.\-]([0-9A-Za-z]{4})\b/g);
+  if (splitGroupMatch) {
+    for (const m of splitGroupMatch) {
+      const combined = m.replace(/[\s\.\-]/g, '');
+      const healed = healDigitString(combined);
+      if (isValidRef(healed)) return healed;
     }
   }
 
-  // 2. Sprawdź czy którakolwiek linia zaczyna się od kodu 2-3 cyfrowego: np. "155 WKRĘT UNIWERSALNY"
-  const lines = norm.split('\n').map((l) => l.trim()).filter(Boolean);
-  for (const line of lines) {
-    const leadingMatch = line.match(/^([0-9]{2,4})[\s\.\:\-]+[A-Za-zĄ-ź]/);
-    if (leadingMatch) {
-      let code = leadingMatch[1];
-      if (code.length === 4) code = code.slice(-3);
-      if (code === '380' || code === '30' || code === '0') code = '980';
-      return code;
-    }
+  // Wzorzec 4: Czyste 8 cyfr w tekście
+  const cleanDigits = rawText.replace(/[^0-9]/g, ' ');
+  const eightDigitMatches = cleanDigits.match(/\b(\d{8})\b/g) || [];
+  for (const m of eightDigitMatches) {
+    if (isValidRef(m)) return m;
   }
 
-  // 3. Sprawdź liczby 3-cyfrowe w tekście z odrzuceniem wymiarów (np. 120 mm) i cen
-  const all3Digit = norm.match(/\b([1-9][0-9]{2})\b/g) || [];
-  const validCandidates = all3Digit.filter((c) => {
-    if (norm.includes(`${c} mm`) || norm.includes(`${c}mm`)) return false;
-    if (dimension && dimension.includes(c)) return false;
-    return true;
-  });
-
-  if (validCandidates.length > 0) {
-    let best = validCandidates[0];
-    if (best === '380') best = '980';
-    return best;
-  }
-
-  // 4. Sprawdź 2-cyfrowy kod wagi (np. 42, 66) z odrzuceniem wymiaru
-  const all2Digit = norm.match(/\b([1-9][0-9])\b/g) || [];
-  const valid2Candidates = all2Digit.filter((c) => {
-    if (dimension && dimension.includes(c)) return false;
-    // Odrzuć jeśli to część ceny (np. 38, 49)
-    if (norm.includes(`${c},`) || norm.includes(`,${c}`) || norm.includes(`${c}.`)) return false;
-    return true;
-  });
-  if (valid2Candidates.length > 0) {
-    return valid2Candidates[0];
-  }
-
-  // 5. Korekta na podstawie typu produktu, jeśli OCR nie zdołał odczytać z powodu silnego odblasku:
-  if (detectedName === 'Kołki do G-K Molly') {
-    return '980';
-  }
-  if (detectedName === 'Wkręt uniwersalny' && /6x90/i.test(dimension)) {
-    return '169';
-  }
-
-  return '';
-}
-
-/**
- * Precyzyjna ekstrakcja numeru referencyjnego LM (8 cyfr) lub kodu EAN (13 cyfr).
- * Rozpoznaje etykiety papierowe (Ref: 42660256) oraz wyświetlacze e-papier ESL (nad słowem ZAPAS),
- * korygując zniekształcenia OCR w znakach matrycowych (H/A->4, B->8, I/l->1, O->0, S->5, Z->2).
- */
-export function extractRefNumber(rawText: string, clientBarcodeCode?: string): string {
-  const norm = normalizeOcrRawText(rawText);
-
-  // 1. NAJWYŻSZY PRIORYTET: Etykieta "Ref:" / "Nr ref:" / "Referencja" (fiszki i etykiety papierowe Standers / LM)
-  const refLabelMatch = norm.match(/(?:ref|nr\s*ref|referencja)[\s\:\.\-]+([0-9A-Za-z]{7,13})/i);
-  if (refLabelMatch) {
-    let clean = refLabelMatch[1]
-      .replace(/[OoQqDd]/g, '0')
-      .replace(/[Il|!]/g, '1')
-      .replace(/[Bb]/g, '8')
-      .replace(/[Ss]/g, '5')
-      .replace(/[HhAa]/g, '4')
-      .replace(/[Zz]/g, '2')
-      .replace(/[^0-9]/g, '');
-    if (clean.length === 8 || clean.length === 13) {
-      return clean;
-    }
-  }
-
-  // 2. Pozycja nad słowem ZAPAS / TAPAS / FAPAS (standardowy układ e-papieru w Leroy Merlin)
-  const zapasPos = norm.search(/zapas|tapas|fapas|apas|zapaś/i);
-  if (zapasPos > 0) {
-    const textBefore = norm.slice(Math.max(0, zapasPos - 80), zapasPos);
-    // Wyciągamy tokeny 7-13 znakowe
-    const words = textBefore.match(/[A-Za-z0-9]{7,13}/g) || [];
-    for (let i = words.length - 1; i >= 0; i--) {
-      const candidate = words[i];
-      // Odrzuć słowa czysto literowe (np. UNIWERSALNY)
-      if (/^[a-zA-Z]+$/.test(candidate) && candidate.length > 8) continue;
-      // Usuń ewentualne przedrostki jak ns / nr / id
-      let w = candidate.replace(/^[a-z]{1,2}(?=[0-9A-Z])/, '');
-      let fixed = w
-        .replace(/[HhAa]/g, '4')
-        .replace(/[Bb]/g, '8')
-        .replace(/[Il|!]/g, '1')
-        .replace(/[OoQqDd]/g, '0')
-        .replace(/[Ss]/g, '5')
-        .replace(/[Zz]/g, '2')
-        .replace(/[^0-9]/g, '');
-      if (fixed.length >= 8 && !fixed.startsWith('147')) {
-        return fixed.slice(0, 8);
+  // Wzorzec 5: Sliding-window po tokenach z korektą liter (np. 44B13216, 448132l6, LAB13216)
+  const words = rawText.split(/\s+/);
+  for (const w of words) {
+    const cleaned = w.replace(/^[^0-9A-Za-z|!]+|[^0-9A-Za-z|!]+$/g, '');
+    if (cleaned.length >= 7) {
+      for (let i = 0; i <= cleaned.length - 8; i++) {
+        const sub = cleaned.slice(i, i + 8);
+        const healed = healDigitString(sub);
+        if (isValidRef(healed)) return healed;
+      }
+      if (cleaned.length === 7) {
+        const healed = healDigitString(cleaned);
+        if (isValidRef(healed)) return healed;
       }
     }
   }
 
-  // 3. Czysty 8-cyfrowy numer w tekście (nie kod seryjny zawieszki 147...)
-  const pure8Matches = norm.match(/\b([0-9]{8})\b/g) || [];
-  const valid8 = pure8Matches.filter((n) => !n.startsWith('147'));
-  if (valid8.length > 0) {
-    return valid8[0];
-  }
-
-  // 4. Dowolny token 8-znakowy z cyframi i literami podatnymi na zniekształcenia OCR matrycy e-ink
-  const candidateWords = norm.match(/\b[0-9A-Za-z]{8}\b/g) || [];
-  for (const cw of candidateWords) {
-    if (/^[a-zA-Z]+$/.test(cw)) continue;
-    let fixed = cw
-      .replace(/[HhAa]/g, '4')
-      .replace(/[Bb]/g, '8')
-      .replace(/[Il|!]/g, '1')
-      .replace(/[OoQqDd]/g, '0')
-      .replace(/[Ss]/g, '5')
-      .replace(/[Zz]/g, '2')
-      .replace(/[^0-9]/g, '');
-    if (fixed.length === 8 && !fixed.startsWith('147')) {
-      return fixed;
-    }
-  }
-
-  // 5. Kod kreskowy EAN ze skanera klienta (BarcodeDetector / ZXing)
-  if (clientBarcodeCode && !clientBarcodeCode.startsWith('147')) {
-    const cleanBc = clientBarcodeCode.replace(/\D/g, '');
-    if (cleanBc.length === 8 || cleanBc.length === 13) {
-      return cleanBc;
-    }
-  }
-
-  // 6. Kod EAN-13 znaleziony w tekście OCR (np. =5901171215451)
-  const eanMatch = norm.match(/(?:590[0-9]{10}|[0-9]{13})/);
-  if (eanMatch && !eanMatch[0].startsWith('147')) {
-    return eanMatch[0];
-  }
-
-  // 7. Ogólny fallback na dowolny ciąg 8 cyfr po usunięciu śmieci
-  const cleanDigits = norm.replace(/[^0-9]/g, ' ');
-  const fallback8 = cleanDigits.match(/\b(\d{8})\b/g) || [];
-  const pureFallback = fallback8.filter((r) => !r.startsWith('147'));
-  if (pureFallback.length > 0) {
-    return pureFallback[0];
+  // Wzorzec 6: Czyste 7 cyfr w tekście
+  const sevenDigitMatches = cleanDigits.match(/\b(\d{7})\b/g) || [];
+  for (const m of sevenDigitMatches) {
+    if (isValidRef(m)) return m;
   }
 
   return '';
 }
 
 /**
- * Precyzyjna ekstrakcja ceny (np. 38,49 zł/kg, 32,90 zł/kg).
- * Obsługuje podział cyfr matrycy e-ink (np. duże 38 i małe 49).
+ * Inteligentny parser etykiet sklepowych ESL (Leroy Merlin, Castorama, OBI)
+ * Ekstrahuje wg priorytetów użytkownika:
+ * 1. Numer referencyjny LM (8 cyfr, np. 44813216, 99146892)
+ * 2. Kod EAN-13 (13 cyfr, np. 5901171215598) - jeśli brak 8-cyfrowego ref
+ * 3. Numer na wadze (kod wagi: 2-3 cyfry, np. 169, 980, 247)
+ * 4. Nazwę artykułu (np. Wkręt uniwersalny, Kołki do G-K Molly)
+ * 5. Rozmiar / wymiar (np. 6x90 mm, 4x12 mm)
+ * 6. Cenę (np. 38,49 zł/kg)
+ * Ignoruje całkowicie pionowy kod kreskowy / ID etykiety hardware (np. kody z wykrzyknikiem lub 1474...)
  */
-export function extractPrice(rawText: string): string {
-  const norm = normalizeOcrRawText(rawText);
+export function parseEslOcrText(rawText: string): OcrRecognizedLabel {
+  const lines = rawText.split('\n').map((l) => cleanOcrText(l)).filter(Boolean);
 
-  // 1. Standardowy format: np. "38,49 zł/kg", "38.49 zł"
-  const m1 = norm.match(/\b([1-9][0-9]{0,2})[\.,]([0-9]{2})\s*(?:zł|zl|z\b|\/kg)/i);
-  if (m1) {
-    return `${m1[1]},${m1[2]} zł/kg`;
+  let scaleCode = '';
+  let name = '';
+  let dimension = '';
+  let refNumber = '';
+  let eanCode = '';
+  let priceText = 'Cena';
+
+  // 1. Wyszukanie kodu EAN-13 (13 cyfr, np. 5901171215598, 5905458027386)
+  const cleanDigits = rawText.replace(/[^0-9]/g, ' ');
+  const eanMatches = cleanDigits.match(/\b(590\d{10}|\d{13})\b/g) || [];
+  if (eanMatches.length > 0 && eanMatches[0]) {
+    eanCode = eanMatches[0];
   }
 
-  // 2. Podział matrycowy e-ink: np. "38H 45 z" lub "38 49 z" lub "38 ... 49"
-  const m2 = norm.match(/\b([1-9][0-9]{1,2})\s*[Hh\.,\s]\s*([0-9]{2})\s*(?:zł|zl|z\b|\/kg|wgra)/i);
-  if (m2) {
-    let cents = m2[2];
-    // Sprawdź czy po słowie z/wgra nie pojawia się rzeczywista końcówka groszy (np. 49)
-    const after = norm.slice(norm.indexOf(m2[0]) + m2[0].length, norm.indexOf(m2[0]) + m2[0].length + 30);
-    const mCents = after.match(/\b([0-9]{2})\b/);
-    if (mCents && (mCents[1] === '49' || mCents[1] === '99' || mCents[1] === '50' || mCents[1] === '89')) {
-      cents = mCents[1];
+  // 2. Priorytet 1 dla numeru referencyjnego: 8- lub 7-cyfrowy numer referencyjny LM (np. 44813216, 99146892)
+  const lmRef = extractLmReferenceNumber(rawText, eanCode);
+  if (lmRef) {
+    refNumber = lmRef;
+  } else if (eanCode) {
+    // Priorytet 2: Fallback na kod EAN-13 tylko jeśli numer referencyjny nie został znaleziony
+    refNumber = eanCode;
+  }
+
+  // 3. Słowa kluczowe artykułów metalowych / złącznych
+  const fastenerKeywords = [
+    'KOLKI',
+    'KOŁKI',
+    'WKRET',
+    'WKRĘT',
+    'SRUBA',
+    'ŚRUBA',
+    'NAKRETKA',
+    'NAKRĘTKA',
+    'PODKLADKA',
+    'PODKŁADKA',
+    'KOTWA',
+    'GWOZDZ',
+    'GWÓŹDŹ',
+    'HAK',
+    'MOLLY',
+    'G-K',
+    'UNIWERSALNY',
+    'DREWNA',
+    'METALU',
+    'BETONU',
+    'SAMOWIERCACY',
+    'STOŻKOWY',
+  ];
+
+  // Pomocnik korygujący częste zamiany cienkich cyfr w kodzie wagi (np. ISS -> 155, l69 -> 169, 98O -> 980)
+  const normalizeScaleCode = (raw: string): string => {
+    if (!raw) return '';
+    const fixed = raw
+      .trim()
+      .toUpperCase()
+      .replace(/O/g, '0')
+      .replace(/[IL|!]/g, '1')
+      .replace(/S/g, '5')
+      .replace(/B/g, '8')
+      .replace(/Z/g, '2')
+      .replace(/G|Q/g, '9');
+
+    if (/^[1-9][0-9]{1,2}$/.test(fixed)) {
+      if (fixed === '380' || fixed === '30' || fixed === '0') return '980';
+      return fixed;
     }
-    return `${m2[1]},${cents} zł/kg`;
-  }
+    return '';
+  };
 
-  // 3. Dowolna liczba dziesiętna w tekście:
-  const m3 = norm.match(/\b([1-9][0-9]{1,2})[\.,]([0-9]{2})\b/);
-  if (m3) {
-    return `${m3[1]},${m3[2]} zł/kg`;
-  }
-
-  return 'Cena';
-}
-
-/**
- * Główny parser etykiet sklepowych ESL.
- */
-export function parseEslOcrText(rawText: string, clientBarcodeCode?: string): OcrRecognizedLabel {
-  const norm = normalizeOcrRawText(rawText);
-  const lines = norm.split('\n').map((l) => l.trim()).filter(Boolean);
-
-  // 1. Nazwa artykułu (z automatyczną rekonstrukcją słownikową)
-  let name = matchFastenerName(norm);
-  if (!name) {
-    // Próba odczytania czystego tekstu jeśli brak w słowniku
-    for (const l of lines) {
-      if (l.length >= 4 && !/^[0-9\s\.\:\-]+$/.test(l)) {
-        name = l.replace(/^[0-9\s\.\:\-]+/, '').trim();
+  // 4. Poszukiwanie linii z numerem na wadze i nazwą: "169 WKRET UNIWERSALNY" lub "ISS WKRET..." lub "980 KOLKI..."
+  for (const line of lines) {
+    const scaleMatch = line.match(/(?:^|[\s\.\:\-\>]+)([0-9A-Za-z|!]{2,3})\s+([A-ZĄĆĘŁŃÓŚŹŻa-ząćęłńóśźż0-9\-\s\.\/]{3,})/i);
+    if (scaleMatch && scaleMatch[1] && scaleMatch[2]) {
+      const candidate = normalizeScaleCode(scaleMatch[1]);
+      if (candidate) {
+        scaleCode = candidate;
+        name = scaleMatch[2].trim();
         break;
       }
     }
   }
+
+  // Jeśli nazwa nie została znaleziona na początku z kodem, szukamy po słowach kluczowych
   if (!name) {
-    name = 'Wkręt do drewna';
+    for (const line of lines) {
+      for (const kw of fastenerKeywords) {
+        if (line.toUpperCase().includes(kw)) {
+          // Szukamy kodu wagi na tej samej linii
+          const tokens = line.split(/\s+/);
+          for (const tok of tokens) {
+            const cand = normalizeScaleCode(tok);
+            if (cand && !scaleCode) {
+              scaleCode = cand;
+              break;
+            }
+          }
+          name = line.replace(/^[0-9\sA-Za-z|!]{1,4}\s+/, '').trim();
+          break;
+        }
+      }
+      if (name) break;
+    }
   }
 
-  // 2. Wymiar
-  const dimension = extractDimension(rawText);
+  // Jeśli numer na wadze nadal pusty, sprawdź kandydatów w tekście
+  if (!scaleCode) {
+    const rawTokens = rawText.split(/\s+/);
+    for (const tok of rawTokens) {
+      const cleanTok = tok.replace(/[^0-9A-Za-z|!]/g, '');
+      if (cleanTok.length >= 2 && cleanTok.length <= 3) {
+        const cand = normalizeScaleCode(cleanTok);
+        if (cand && !refNumber.includes(cand) && !eanCode.includes(cand)) {
+          scaleCode = cand;
+          break;
+        }
+      }
+    }
+  }
 
-  // 3. Kod wagi
-  const scaleCode = extractScaleCode(rawText, name, dimension);
+  // 5. Rozmiar / wymiar (np. 6X90 MM, 4X12, 5X24, 4x40 mm, M6x30)
+  for (const line of lines) {
+    const dimMatch = line.match(/\b([1-9][0-9]?(?:[\.,][0-9]+)?\s*[xX*]\s*[0-9]+(?:[\.,][0-9]+)?(?:\s*mm)?)\b/i);
+    if (dimMatch) {
+      dimension = dimMatch[1].replace(/\s+/g, '').replace('*', 'x').toLowerCase();
+      if (!dimension.endsWith('mm') && !dimension.startsWith('m')) {
+        dimension += ' mm';
+      }
+      break;
+    }
+  }
 
-  // 4. Numer referencyjny
-  const refNumber = extractRefNumber(rawText, clientBarcodeCode);
+  // Dodatkowy fallback na wymiar typu "6X90", "4X12", "5X24"
+  if (!dimension) {
+    const fallbackDim = rawText.match(/\b([0-9]{1,2}\s*[xX*]\s*[0-9]{1,3})\b/i);
+    if (fallbackDim) {
+      dimension = fallbackDim[1].toLowerCase().replace(/\s+/g, '').replace('*', 'x') + ' mm';
+    }
+  }
 
-  // 5. Cena
-  const priceText = extractPrice(rawText);
+  // 6. Cena (np. 38,49 zł/kg, 62,49 zł/kg)
+  const priceMatch = rawText.match(/\b([0-9]{1,3})[\.,\s]([0-9]{2})\s*(?:zł(?:\/kg)?)?/i);
+  if (priceMatch && parseInt(priceMatch[1], 10) >= 1) {
+    priceText = `${priceMatch[1]},${priceMatch[2]} zł/kg`;
+  }
+
+  // Normalizacja nazwy
+  if (name) {
+    if (/KOLK.*MOLLY/i.test(name)) {
+      name = 'Kołki do G-K Molly';
+    } else if (/(WKRET|WKRĘT).*UNIWERSALNY/i.test(name)) {
+      name = 'Wkręt uniwersalny';
+    } else {
+      name = name
+        .split(' ')
+        .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+        .join(' ');
+    }
+  } else {
+    name = refNumber ? 'Artykuł z etykiety ESL' : '';
+  }
 
   return { scaleCode, name, dimension, refNumber, priceText, rawText };
 }
 
 /**
- * Zaawansowane binarizowanie adaptacyjne algorytmem Bradleya-Rotha na Canvasie.
- * Eliminuje odblaski lamp supermarketowych, cienie i odblaski pod kątem.
+ * Zaawansowane przetwarzanie obrazu dla wyświetlaczy ESL (e-papier):
+ * 1. Wykrywanie średniej jasności i adaptacyjne rozciąganie histogramu (Percentile Stretch).
+ *    Działa doskonale w ciemnych alejkach sklepowych i przy nierównomiernym świetle.
+ * 2. Pogrubianie cienkich znaków (Morphological Min-Filter dla ciemnego tekstu).
+ *    Cienkie, ditherowane kropki matrycy E-ink (np. 155, 44813216, 5x40 mm) zostają połączone
+ *    i pogrubione o 1 px, tworząc czytelne dla OCR pełne glify.
  */
-export function applyAdaptiveThresholding(canvas: HTMLCanvasElement): void {
-  const ctx = canvas.getContext('2d');
-  if (!ctx) return;
-
-  const w = canvas.width;
-  const h = canvas.height;
+export function enhanceEslImage(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  options?: { boldenThinStrokes?: boolean }
+): void {
   const imgData = ctx.getImageData(0, 0, w, h);
   const data = imgData.data;
+  const numPixels = w * h;
 
-  // 1. Skala szarości
-  const gray = new Uint8Array(w * h);
-  for (let i = 0; i < w * h; i++) {
+  const gray = new Uint8Array(numPixels);
+  const hist = new Uint32Array(256);
+  let totalLuminance = 0;
+
+  for (let i = 0; i < numPixels; i++) {
     const idx = i * 4;
-    gray[i] = (data[idx] * 0.299 + data[idx + 1] * 0.587 + data[idx + 2] * 0.114) | 0;
+    const g = (data[idx] * 0.299 + data[idx + 1] * 0.587 + data[idx + 2] * 0.114) | 0;
+    gray[i] = g;
+    hist[g]++;
+    totalLuminance += g;
   }
 
-  // 2. Obraz całkowy (Integral Image) dla błyskawicznego wyliczenia średniej lokalnej w O(1)
-  const S = Math.max(15, Math.round(w / 35));
-  const s2 = Math.floor(S / 2);
-  const T = 0.14; // współczynnik progowania
+  const avgLuminance = totalLuminance / numPixels;
 
-  const integral = new Float64Array(w * h);
-  for (let y = 0; y < h; y++) {
-    let sum = 0;
-    for (let x = 0; x < w; x++) {
-      sum += gray[y * w + x];
-      integral[y * w + x] = y === 0 ? sum : integral[(y - 1) * w + x] + sum;
+  // Znalezienie percentyli p2 i p97 do dynamicznego rozciągnięcia kontrastu
+  let count = 0;
+  let pLow = 0;
+  let pHigh = 255;
+  const lowTarget = Math.round(numPixels * 0.02);
+  const highTarget = Math.round(numPixels * 0.97);
+
+  for (let val = 0; val < 256; val++) {
+    count += hist[val];
+    if (pLow === 0 && count >= lowTarget) {
+      pLow = val;
+    }
+    if (count >= highTarget) {
+      pHigh = val;
+      break;
     }
   }
 
-  // 3. Progowanie lokalne Bradleya
-  for (let y = 0; y < h; y++) {
-    const y1 = Math.max(0, y - s2);
-    const y2 = Math.min(h - 1, y + s2);
-    for (let x = 0; x < w; x++) {
-      const x1 = Math.max(0, x - s2);
-      const x2 = Math.min(w - 1, x + s2);
-      const count = (x2 - x1) * (y2 - y1);
-      const sum =
-        integral[y2 * w + x2] -
-        integral[y1 * w + x2] -
-        integral[y2 * w + x1] +
-        integral[y1 * w + x1];
+  const range = Math.max(20, pHigh - pLow);
+  const isLowLight = avgLuminance < 85;
 
-      const isBlack = gray[y * w + x] * count < sum * (1 - T);
-      const pixelVal = isBlack ? 0 : 255;
-      const idx = (y * w + x) * 4;
-      data[idx] = pixelVal;
-      data[idx + 1] = pixelVal;
-      data[idx + 2] = pixelVal;
-      data[idx + 3] = 255;
+  // Adaptacyjna normalizacja kontrastu
+  const normalized = new Uint8Array(numPixels);
+  for (let i = 0; i < numPixels; i++) {
+    const val = gray[i];
+    let stretched = ((val - pLow) * 255) / range;
+    if (stretched < 0) stretched = 0;
+    if (stretched > 255) stretched = 255;
+
+    // Krzywa kontrastu dla e-papieru:
+    // W słabym świetle tło mocniej ciągniemy do bieli (255), a tekst do czerni (0)
+    const whiteThreshold = isLowLight ? 150 : 165;
+    const blackThreshold = isLowLight ? 85 : 75;
+
+    if (stretched >= whiteThreshold) {
+      stretched = 255;
+    } else if (stretched <= blackThreshold) {
+      stretched = 0;
+    } else {
+      stretched = ((stretched - blackThreshold) * 255) / (whiteThreshold - blackThreshold);
     }
+    normalized[i] = stretched | 0;
+  }
+
+  // Pogrubianie cienkich/niewyraźnych kresek cyfr (Morphological Min-Filter dla ciemnego tekstu)
+  // Poszerza ciemne piksele o 1 px, co łączy przerwane i blade punkty cyfr
+  const bolden = options?.boldenThinStrokes !== false;
+  const processed = new Uint8Array(numPixels);
+
+  if (bolden) {
+    for (let y = 0; y < h; y++) {
+      const row = y * w;
+      const prevRow = y > 0 ? (y - 1) * w : row;
+      const nextRow = y < h - 1 ? (y + 1) * w : row;
+
+      for (let x = 0; x < w; x++) {
+        const xPrev = x > 0 ? x - 1 : x;
+        const xNext = x < w - 1 ? x + 1 : x;
+
+        const current = normalized[row + x];
+        const minCross = Math.min(
+          current,
+          normalized[prevRow + x],
+          normalized[nextRow + x],
+          normalized[row + xPrev],
+          normalized[row + xNext]
+        );
+
+        // Jeśli sąsiad jest czarnym tekstem (< 70), delikatnie ściągamy piksel, pogrubiając kreskę
+        if (minCross < 70) {
+          processed[row + x] = Math.min(current, minCross + 20);
+        } else {
+          processed[row + x] = current;
+        }
+      }
+    }
+  } else {
+    processed.set(normalized);
+  }
+
+  // Zapis do ImageData
+  for (let i = 0; i < numPixels; i++) {
+    const idx = i * 4;
+    const p = processed[i];
+    data[idx] = p;
+    data[idx + 1] = p;
+    data[idx + 2] = p;
+    data[idx + 3] = 255;
   }
 
   ctx.putImageData(imgData, 0, 0);
@@ -468,16 +419,17 @@ export function applyAdaptiveThresholding(canvas: HTMLCanvasElement): void {
 
 /**
  * Uruchamia rozpoznawanie tekstu OCR po stronie klienta (w przeglądarce).
- * Zawiera zaawansowane przetwarzanie anty-odblaskowe i obsługę kadrowania celownika.
+ * Zawiera wstępne przetwarzanie obrazu w Canvas (rozciąganie kontrastu, pogrubianie cienkich kresek)
+ * Działa w 100% lokalnie na GitHub Pages bez backendu.
  */
 export async function scanEslWithClientOcr(
   imageUrl: string,
   onProgress?: (progress: number, status: string) => void,
-  clientBarcodeCode?: string
+  knownBarcode?: string
 ): Promise<OcrRecognizedLabel | null> {
   let worker: any = null;
   try {
-    if (onProgress) onProgress(10, 'Przetwarzanie obrazu (redukcja odblasków i cieni)...');
+    if (onProgress) onProgress(10, 'Inicjalizacja silnika OCR...');
 
     const img = new Image();
     img.crossOrigin = 'anonymous';
@@ -487,56 +439,61 @@ export async function scanEslWithClientOcr(
       img.src = imageUrl;
     });
 
-    const w = img.naturalWidth || img.width;
-    const h = img.naturalHeight || img.height;
+    const origW = img.naturalWidth || img.width;
+    const origH = img.naturalHeight || img.height;
 
-    // Przygotowanie Canvasa z adaptacyjnym progowaniem
+    // Canvas 1: Całe zdjęcie z podbiciem kontrastu i pogrubieniem cienkich znaków
     const canvas = document.createElement('canvas');
     const maxDim = 1600;
-    let targetW = w;
-    let targetH = h;
-    if (targetW > maxDim || targetH > maxDim) {
-      if (targetW > targetH) {
-        targetH = Math.round((targetH * maxDim) / targetW);
-        targetW = maxDim;
+    let w = origW;
+    let h = origH;
+
+    if (w > maxDim || h > maxDim) {
+      if (w > h) {
+        h = Math.round((h * maxDim) / w);
+        w = maxDim;
       } else {
-        targetW = Math.round((targetW * maxDim) / targetH);
-        targetH = maxDim;
+        w = Math.round((w * maxDim) / h);
+        h = maxDim;
       }
     }
 
-    canvas.width = targetW;
-    canvas.height = targetH;
+    canvas.width = w;
+    canvas.height = h;
     const ctx = canvas.getContext('2d');
     if (!ctx) return null;
 
-    ctx.drawImage(img, 0, 0, targetW, targetH);
+    ctx.drawImage(img, 0, 0, w, h);
 
-    // Zastosuj filtr adaptacyjny Bradleya (usuwa odbicia jarzeniówek i cienie)
-    applyAdaptiveThresholding(canvas);
-    const optimizedDataUrl = canvas.toDataURL('image/png');
+    // Zaawansowane podbicie kontrastu dla słabego światła i e-papieru
+    try {
+      enhanceEslImage(ctx, w, h, { boldenThinStrokes: true });
+    } catch (e) {
+      console.warn('Błąd enhanceEslImage:', e);
+    }
 
-    if (onProgress) onProgress(30, 'Inicjalizacja silnika OCR...');
+    const enhancedDataUrl = canvas.toDataURL('image/jpeg', 0.95);
+
+    if (onProgress) onProgress(30, 'Odczytywanie danych etykiety ESL...');
 
     worker = await createWorker('pol+eng', 1, {
       logger: (m) => {
         if (m.status === 'recognizing text' && onProgress) {
-          const pct = 30 + Math.round((m.progress || 0) * 55);
-          onProgress(pct, `Odczytywanie danych etykiety (${Math.round((m.progress || 0) * 100)}%)...`);
+          const pct = 30 + Math.round((m.progress || 0) * 60);
+          onProgress(pct, `Odczytywanie etykiety (${Math.round((m.progress || 0) * 100)}%)...`);
         }
       },
-    }).catch(async () => {
-      // Fallback jeśli słownik 'pol' nie jest dostępny offline
-      return await createWorker('eng', 1);
     });
 
-    if (onProgress) onProgress(60, 'Skanowanie tekstu etykiety...');
-    const ret = await worker.recognize(optimizedDataUrl);
+    const ret = await worker.recognize(enhancedDataUrl);
     const rawText = ret?.data?.text || '';
 
-    if (onProgress) onProgress(90, 'Inteligentna analiza słownikowa i parametryzacja...');
+    if (onProgress) onProgress(95, 'Przetwarzanie danych...');
 
-    const parsed = parseEslOcrText(rawText, clientBarcodeCode);
+    const parsed = parseEslOcrText(rawText);
+    if (!parsed.refNumber && knownBarcode) {
+      parsed.refNumber = knownBarcode;
+    }
 
     if (parsed.name || parsed.scaleCode || parsed.refNumber || parsed.dimension) {
       return parsed;

@@ -22,6 +22,7 @@ import {
   Activity,
   Zap,
   ShieldCheck,
+  Lightbulb,
 } from 'lucide-react';
 import { FiszkaItem } from '../types/label';
 import { scanBarcodeClientSide, DecodedBarcodeResult } from '../utils/barcodeScanner';
@@ -31,6 +32,7 @@ import {
   calculateLaplacianSharpness,
   calculateMotionDifference,
   captureSharpestFrameFromVideo,
+  calculateAverageLuminance,
 } from '../utils/cameraStabilizer';
 
 interface EslScannerModalProps {
@@ -88,6 +90,11 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
   const prevGrayRef = useRef<Uint8Array | null>(null);
   const steadySinceRef = useRef<number>(0);
   const isCapturingRef = useRef<boolean>(false);
+
+  // Doświetlenie (latarka) i detekcja słabego oświetlenia
+  const [hasTorch, setHasTorch] = useState(false);
+  const [isTorchOn, setIsTorchOn] = useState(false);
+  const [isLowLightDetected, setIsLowLightDetected] = useState(false);
 
   // Stop camera when closing
   useEffect(() => {
@@ -185,6 +192,23 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
     }
     setIsCameraActive(false);
     setIsCameraStarting(false);
+    setIsTorchOn(false);
+    setHasTorch(false);
+    setIsLowLightDetected(false);
+  };
+
+  const toggleTorch = async () => {
+    const track = streamRef.current?.getVideoTracks()?.[0];
+    if (!track || !('applyConstraints' in track)) return;
+    try {
+      const nextTorch = !isTorchOn;
+      await (track as any).applyConstraints({
+        advanced: [{ torch: nextTorch }],
+      });
+      setIsTorchOn(nextTorch);
+    } catch (err) {
+      console.warn('Nie udało się przełączyć latarki:', err);
+    }
   };
 
   const startCamera = async (deviceId?: string) => {
@@ -215,11 +239,14 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
         stream = await navigator.mediaDevices.getUserMedia({ video: true });
       }
 
-      // Spróbuj aktywować sprzętową stabilizację i ciągły autofokus jeśli przeglądarka wspiera
+      // Spróbuj aktywować sprzętową stabilizację, autofokus i wykryj latarkę
       try {
         const track = stream.getVideoTracks()?.[0];
         if (track && 'applyConstraints' in track) {
           const capabilities: any = (track as any).getCapabilities ? (track as any).getCapabilities() : {};
+          if (capabilities && 'torch' in capabilities) {
+            setHasTorch(true);
+          }
           const advancedList: any[] = [];
           if (capabilities.focusMode && capabilities.focusMode.includes('continuous')) {
             advancedList.push({ focusMode: 'continuous' });
@@ -298,6 +325,9 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
 
       const currentGray = getDownsampledGrayscale(video, 120, 90);
       if (!currentGray) return;
+
+      const avgLum = calculateAverageLuminance(currentGray);
+      setIsLowLightDetected(avgLum < 55);
 
       const sharpness = calculateLaplacianSharpness(currentGray, 120, 90);
       setSharpnessLevel(Math.round(sharpness));
@@ -508,12 +538,12 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
     // 4. Jeśli OCR lub dekoder kodów kreskowych odczytał dane etykiety:
     if (ocrResult || clientBarcode) {
       let finalRefNumber = '';
-      if (ocrResult?.refNumber && ocrResult.refNumber.length === 8) {
-        finalRefNumber = ocrResult.refNumber;
-      } else if (ocrResult?.refNumber && ocrResult.refNumber.length === 13) {
+      if (ocrResult?.refNumber && (ocrResult.refNumber.length === 8 || ocrResult.refNumber.length === 7)) {
         finalRefNumber = ocrResult.refNumber;
       } else if (clientBarcode?.code) {
         finalRefNumber = clientBarcode.code;
+      } else if (ocrResult?.refNumber && ocrResult.refNumber.length === 13) {
+        finalRefNumber = ocrResult.refNumber;
       } else {
         finalRefNumber = ocrResult?.refNumber || '';
       }
@@ -877,6 +907,24 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
                       </div>
                     </div>
 
+                    {/* Wskaźnik słabego oświetlenia z możliwością szybkiego kliknięcia */}
+                    {isLowLightDetected && !isTorchOn && (
+                      <div className="flex justify-center -my-1">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            toggleTorch();
+                          }}
+                          className="pointer-events-auto bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-3 py-1 rounded-full text-[11px] shadow-lg flex items-center gap-1.5 transition-all cursor-pointer animate-pulse"
+                          title="Kliknij, aby włączyć doświetlenie latarką"
+                        >
+                          <Lightbulb className="w-3.5 h-3.5" />
+                          <span>Słabe światło – włącz latarkę 💡</span>
+                        </button>
+                      </div>
+                    )}
+
                     <div className="flex justify-center items-center">
                       {isCapturingBurst ? (
                         <div className="text-center text-xs text-white bg-emerald-600/95 font-bold px-3.5 py-1.5 rounded-lg shadow-xl flex items-center gap-2">
@@ -1028,6 +1076,21 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
                           ? `Zeskanuj kolejną (#${recognizedItems.length + 1})`
                           : 'Zrób zdjęcie i odczytaj'}
                       </span>
+                    </button>
+
+                    {/* Przycisk latarki / doświetlenia jeśli urządzenie posiada diodę lub włączono kamerę */}
+                    <button
+                      type="button"
+                      onClick={toggleTorch}
+                      className={`px-3.5 py-2 font-semibold text-xs rounded-xl flex items-center gap-1.5 transition-all cursor-pointer border ${
+                        isTorchOn
+                          ? 'bg-amber-400 text-slate-950 border-amber-300 shadow-md font-bold'
+                          : 'bg-slate-800 hover:bg-slate-700 text-slate-200 border-slate-700'
+                      }`}
+                      title="Włącz/wyłącz doświetlenie latarką aparatu (przydatne w ciemnych alejkach)"
+                    >
+                      <Lightbulb className={`w-3.5 h-3.5 ${isTorchOn ? 'text-slate-950 fill-current' : 'text-amber-400'}`} />
+                      <span>{isTorchOn ? 'Latarka: WŁ' : 'Latarka'}</span>
                     </button>
 
                     <button

@@ -14,33 +14,16 @@ export async function generateFillablePdf(
   const pdfDoc = await PDFDocument.create();
   pdfDoc.registerFontkit(fontkit);
 
-  // Load custom TTF fonts (Leroy Merlin Sans) with Polish characters support
+  // Load custom TTF font with Polish characters support
   let customFontBold: PDFFont | undefined;
-  let customFontRegular: PDFFont | undefined;
 
   if (fontBoldBytes) {
     customFontBold = await pdfDoc.embedFont(fontBoldBytes);
   } else if (typeof window !== 'undefined') {
     try {
-      const resBold = await fetch('./fonts/LeroyMerlinSans-Bold.ttf');
-      if (resBold.ok) {
-        const bufBold = await resBold.arrayBuffer();
-        customFontBold = await pdfDoc.embedFont(new Uint8Array(bufBold));
-      }
-    } catch {
-      // fallback
-    }
-  }
-
-  if (fontRegularBytes) {
-    customFontRegular = await pdfDoc.embedFont(fontRegularBytes);
-  } else if (typeof window !== 'undefined') {
-    try {
-      const resReg = await fetch('./fonts/LeroyMerlinSans-Regular.ttf');
-      if (resReg.ok) {
-        const bufReg = await resReg.arrayBuffer();
-        customFontRegular = await pdfDoc.embedFont(new Uint8Array(bufReg));
-      }
+      const resBold = await fetch('./fonts/LiberationSans-Bold.ttf');
+      const bufBold = await resBold.arrayBuffer();
+      customFontBold = await pdfDoc.embedFont(new Uint8Array(bufBold));
     } catch {
       // fallback
     }
@@ -82,13 +65,8 @@ export async function generateFillablePdf(
   fontDict.set(PDFName.of('Helvetica'), helvBold.ref);
   fontDict.set(PDFName.of('Helv'), helvBold.ref);
   if (customFontBold) {
-    fontDict.set(PDFName.of('LeroyMerlinSans-Bold'), customFontBold.ref);
-    fontDict.set(PDFName.of('LMSBold'), customFontBold.ref);
+    fontDict.set(PDFName.of('LiberationSans-Bold'), customFontBold.ref);
     fontDict.set(PDFName.of('CustomBold'), customFontBold.ref);
-  }
-  if (customFontRegular) {
-    fontDict.set(PDFName.of('LeroyMerlinSans-Regular'), customFontRegular.ref);
-    fontDict.set(PDFName.of('LMSRegular'), customFontRegular.ref);
   }
   dr.set(PDFName.of('Font'), fontDict);
   form.acroForm.dict.set(PDFName.of('DR'), dr);
@@ -157,22 +135,22 @@ export async function generateFillablePdf(
         color: rgb(1, 1, 1),
       });
 
-      // 2. Left Section: STANDERS Logo (powiększone, bez pionowej linii dzielącej)
-      const logoAreaWidth = 49 * MM_TO_PT;
+      // 2. Left Section: 1:1 STANDERS Logo (wymiary 36mm x 23mm, idealne proporcje 1.58:1)
+      const logoAreaWidth = 42 * MM_TO_PT;
       if (embeddedLogo) {
         page.drawImage(embeddedLogo, {
-          x: xLeft + ((49 - 37) / 2) * MM_TO_PT,
+          x: xLeft + 3 * MM_TO_PT,
           y: yBottom + 8.5 * MM_TO_PT,
-          width: 37 * MM_TO_PT,
+          width: 36 * MM_TO_PT,
           height: 23 * MM_TO_PT,
         });
       }
 
-      // 3. Middle Section: przesunięty o 5mm w lewo
+      // 3. Middle Section:
       const middleX = xLeft + logoAreaWidth + 2 * MM_TO_PT;
-      const middleWidth = (195 - 49 - 60 - 3) * MM_TO_PT;
+      const middleWidth = 84 * MM_TO_PT;
 
-      // Row 1: Nazwa towaru (np. "Wkręt do drewna") - jeszcze trochę niżej
+      // Row 1: Nazwa towaru (np. "Wkręt do drewna")
       const nameField = form.createTextField(`fiszka_${globalIdx + 1}_nazwa`);
       if (item.name) {
         nameField.setText(item.name);
@@ -180,16 +158,14 @@ export async function generateFillablePdf(
       nameField.setAlignment(TextAlignment.Left);
       nameField.addToPage(page, {
         x: middleX,
-        y: yBottom + 20.8 * MM_TO_PT,
+        y: yBottom + 25.5 * MM_TO_PT,
         width: middleWidth,
-        height: 9.5 * MM_TO_PT,
+        height: 11 * MM_TO_PT,
         borderWidth: 0,
         font: boldFont,
       });
       nameField.setFontSize(14);
-      nameField.acroField.setDefaultAppearance(
-        customFontBold ? '/LMSBold 14 Tf 0 0 0 rg' : '/Helvetica-Bold 14 Tf 0 0 0 rg'
-      );
+      nameField.acroField.setDefaultAppearance('/Helvetica-Bold 14 Tf 0 0 0 rg');
       nameField.acroField.getWidgets()[0].dict.set(PDFName.of('DR'), dr);
       if (item.name) {
         try {
@@ -200,7 +176,7 @@ export async function generateFillablePdf(
       }
       attachAutoClearAction(nameField, `nazwa_${globalIdx + 1}`);
 
-      // Row 2: Wymiar (np. "6x80 mm") - bezpośrednio nad zielonym paskiem wagi
+      // Row 2: Wymiar (np. "6x80 mm") - wyraźnie pogrubiony
       const dimField = form.createTextField(`fiszka_${globalIdx + 1}_wymiar`);
       if (item.dimension) {
         dimField.setText(item.dimension);
@@ -208,16 +184,14 @@ export async function generateFillablePdf(
       dimField.setAlignment(TextAlignment.Left);
       dimField.addToPage(page, {
         x: middleX,
-        y: yBottom + 14.5 * MM_TO_PT,
+        y: yBottom + 14 * MM_TO_PT,
         width: middleWidth,
-        height: 7.5 * MM_TO_PT,
+        height: 11 * MM_TO_PT,
         borderWidth: 0,
         font: boldFont,
       });
       dimField.setFontSize(18);
-      dimField.acroField.setDefaultAppearance(
-        customFontBold ? '/LMSBold 18 Tf 0 0 0 rg' : '/Helvetica-Bold 18 Tf 0 0 0 rg'
-      );
+      dimField.acroField.setDefaultAppearance('/Helvetica-Bold 18 Tf 0 0 0 rg');
       dimField.acroField.getWidgets()[0].dict.set(PDFName.of('DR'), dr);
       if (item.dimension) {
         try {
@@ -228,10 +202,10 @@ export async function generateFillablePdf(
       }
       attachAutoClearAction(dimField, `wymiar_${globalIdx + 1}`);
 
-      // Row 3: Zaokrąglony zielony pasek (zwiększony o 5mm do 74mm)
+      // Row 3: Zaokrąglony zielony pasek DOKŁADNIE 7,5 cm (75mm) z numerem wagi (#d7f5c5)
       const badgeX = middleX;
       const badgeY = yBottom + 1.8 * MM_TO_PT;
-      const badgeWidth = 74 * MM_TO_PT; // zwiększone o 5mm do 74mm
+      const badgeWidth = 75 * MM_TO_PT; // dokładnie 7.5 cm
       const badgeHeight = 12.2 * MM_TO_PT;
       const badgeR = 2.5 * MM_TO_PT;
       const greenColor = rgb(0.843, 0.961, 0.773);
@@ -247,14 +221,14 @@ export async function generateFillablePdf(
 
       // "Wpisz na wadze:" - pojedynczy, czysty, ostry napis
       page.drawText('Wpisz na wadze:', {
-        x: badgeX + 3 * MM_TO_PT,
+        x: badgeX + 3.2 * MM_TO_PT,
         y: badgeY + 4.2 * MM_TO_PT,
         size: 13.5,
         font: boldFont,
         color: rgb(0, 0, 0),
       });
 
-      // Numer na wadze - ekstra pogrubiony w czcionce Leroy Merlin Sans Bold
+      // Numer na wadze - pogrubiony, duży (28pt)
       const scaleField = form.createTextField(`fiszka_${globalIdx + 1}_waga`);
       if (item.scaleCode) {
         scaleField.setText(String(item.scaleCode));
@@ -266,12 +240,10 @@ export async function generateFillablePdf(
         width: 30 * MM_TO_PT,
         height: 11.2 * MM_TO_PT,
         borderWidth: 0,
-        font: boldFont,
+        font: helvBold,
       });
       scaleField.setFontSize(28);
-      scaleField.acroField.setDefaultAppearance(
-        customFontBold ? '/LMSBold 28 Tf 2 Tr 0.45 w 0 0 0 RG 0 0 0 rg' : '/Helvetica-Bold 28 Tf 0 0 0 rg'
-      );
+      scaleField.acroField.setDefaultAppearance('/Helvetica-Bold 28 Tf 0 0 0 rg');
 
       const scaleWidget = scaleField.acroField.getWidgets()[0];
       scaleWidget.dict.set(PDFName.of('DR'), dr);
@@ -279,17 +251,17 @@ export async function generateFillablePdf(
 
       if (item.scaleCode) {
         try {
-          scaleField.updateAppearances(boldFont);
+          scaleField.updateAppearances(helvBold);
         } catch {
           // ignore
         }
       }
       attachAutoClearAction(scaleField, `waga_${globalIdx + 1}`);
 
-      // 4. Right Section: Czarna ramka odsunięta o 5 mm od prawej krawędzi fiszki
-      const frameWidth = 53.5 * MM_TO_PT;
+      // 4. Right Section: Czarna ramka 5.5 cm szerokości × 3.7 cm wysokości (55mm x 37mm) z marginesem 5mm od końca
+      const frameWidth = 55 * MM_TO_PT;
       const frameHeight = 37 * MM_TO_PT;
-      const frameX = xLeft + labelWidth - frameWidth - 5 * MM_TO_PT; // odsunięta o 5mm od prawej krawędzi
+      const frameX = xLeft + labelWidth - frameWidth - 5 * MM_TO_PT; // margines od końca 5mm
       const frameY = yBottom + 1.5 * MM_TO_PT;
 
       page.drawRectangle({
@@ -317,9 +289,7 @@ export async function generateFillablePdf(
         font: boldFont,
       });
       priceField.setFontSize(11.5);
-      priceField.acroField.setDefaultAppearance(
-        customFontBold ? '/LMSBold 11.5 Tf 0 0 0 rg' : '/Helvetica-Bold 11.5 Tf 0 0 0 rg'
-      );
+      priceField.acroField.setDefaultAppearance('/Helvetica-Bold 11.5 Tf 0 0 0 rg');
       priceField.acroField.getWidgets()[0].dict.set(PDFName.of('DR'), dr);
       if (item.priceText) {
         try {
@@ -354,9 +324,7 @@ export async function generateFillablePdf(
         font: boldFont,
       });
       refField.setFontSize(11);
-      refField.acroField.setDefaultAppearance(
-        customFontBold ? '/LMSBold 11 Tf 0 0 0 rg' : '/Helvetica-Bold 11 Tf 0 0 0 rg'
-      );
+      refField.acroField.setDefaultAppearance('/Helvetica-Bold 11 Tf 0 0 0 rg');
       refField.acroField.getWidgets()[0].dict.set(PDFName.of('DR'), dr);
       if (item.refNumber) {
         try {

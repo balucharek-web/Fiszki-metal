@@ -111,6 +111,19 @@ export function calculateMotionDifference(prevGray: Uint8Array, currentGray: Uin
 }
 
 /**
+ * Oblicza średnią jasność klatki (0 = czarno, 255 = biało).
+ * Wartość poniżej 50 oznacza słabe oświetlenie w alejce regałowej.
+ */
+export function calculateAverageLuminance(gray: Uint8Array): number {
+  if (gray.length === 0) return 128;
+  let sum = 0;
+  for (let i = 0; i < gray.length; i++) {
+    sum += gray[i];
+  }
+  return sum / gray.length;
+}
+
+/**
  * TECHNOLOGIA ANTI-SHAKE BURST (Najostrzejsza klatka z serii):
  * Gdy użytkownik klika przycisk migawki, dotknięcie ekranu niemal zawsze powoduje
  * mikroskopijne szarpnięcie aparatem w pierwszym ułamku sekundy.
