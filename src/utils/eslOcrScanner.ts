@@ -202,26 +202,95 @@ export function extractScaleCode(rawText: string, detectedName: string, dimensio
 
 /**
  * Precyzyjna ekstrakcja numeru referencyjnego LM (8 cyfr) lub kodu EAN (13 cyfr).
+ * Rozpoznaje etykiety papierowe (Ref: 42660256) oraz wyświetlacze e-papier ESL (nad słowem ZAPAS),
+ * korygując zniekształcenia OCR w znakach matrycowych (H/A->4, B->8, I/l->1, O->0, S->5, Z->2).
  */
 export function extractRefNumber(rawText: string, clientBarcodeCode?: string): string {
+  // 1. NAJWYŻSZY PRIORYTET: Etykieta "Ref:" / "Nr ref:" / "Referencja" (fiszki i etykiety papierowe Standers / LM)
+  const refLabelMatch = rawText.match(/(?:ref|nr\s*ref|referencja)[\s\:\.\-]+([0-9A-Za-z]{7,13})/i);
+  if (refLabelMatch) {
+    let clean = refLabelMatch[1]
+      .replace(/[OoQqDd]/g, '0')
+      .replace(/[Il|!]/g, '1')
+      .replace(/[Bb]/g, '8')
+      .replace(/[Ss]/g, '5')
+      .replace(/[HhAa]/g, '4')
+      .replace(/[Zz]/g, '2')
+      .replace(/[^0-9]/g, '');
+    if (clean.length === 8 || clean.length === 13) {
+      return clean;
+    }
+  }
+
+  // 2. Czysty 8-cyfrowy numer w tekście (nie kod seryjny zawieszki 147...)
+  const pure8Matches = rawText.match(/\b([0-9]{8})\b/g) || [];
+  const valid8 = pure8Matches.filter((n) => !n.startsWith('147'));
+  if (valid8.length > 0) {
+    return valid8[0];
+  }
+
+  // 3. Pozycja nad słowem ZAPAS / TAPAS / FAPAS (standardowy układ e-papieru w Leroy Merlin)
+  const zapasPos = rawText.search(/zapas|tapas|fapas|apas|zapaś/i);
+  if (zapasPos > 0) {
+    const textBefore = rawText.slice(Math.max(0, zapasPos - 70), zapasPos);
+    // Szukamy słów 7-12 znakowych
+    const words = textBefore.match(/[A-Za-z0-9]{7,12}/g) || [];
+    for (let i = words.length - 1; i >= 0; i--) {
+      // Odrzuć słowa czysto literowe (np. UNIWERSALNY)
+      if (/^[a-zA-Z]+$/.test(words[i]) && words[i].length > 8) continue;
+      // Usuń ewentualne przedrostki jak ns / nr / id
+      let w = words[i].replace(/^[a-z]{1,2}(?=[0-9A-Z])/, '');
+      let fixed = w
+        .replace(/[HhAa]/g, '4')
+        .replace(/[Bb]/g, '8')
+        .replace(/[Il|!]/g, '1')
+        .replace(/[OoQqDd]/g, '0')
+        .replace(/[Ss]/g, '5')
+        .replace(/[Zz]/g, '2')
+        .replace(/[^0-9]/g, '');
+      if (fixed.length >= 8 && !fixed.startsWith('147')) {
+        return fixed.slice(0, 8);
+      }
+    }
+  }
+
+  // 4. Dowolny token 8-znakowy z cyframi i literami podatnymi na zniekształcenia OCR matrycy e-ink
+  const candidateWords = rawText.match(/\b[0-9A-Za-z]{8}\b/g) || [];
+  for (const cw of candidateWords) {
+    if (/^[a-zA-Z]+$/.test(cw)) continue;
+    let fixed = cw
+      .replace(/[HhAa]/g, '4')
+      .replace(/[Bb]/g, '8')
+      .replace(/[Il|!]/g, '1')
+      .replace(/[OoQqDd]/g, '0')
+      .replace(/[Ss]/g, '5')
+      .replace(/[Zz]/g, '2')
+      .replace(/[^0-9]/g, '');
+    if (fixed.length === 8 && !fixed.startsWith('147')) {
+      return fixed;
+    }
+  }
+
+  // 5. Kod kreskowy EAN ze skanera klienta (BarcodeDetector / ZXing)
+  if (clientBarcodeCode && !clientBarcodeCode.startsWith('147')) {
+    const cleanBc = clientBarcodeCode.replace(/\D/g, '');
+    if (cleanBc.length === 8 || cleanBc.length === 13) {
+      return cleanBc;
+    }
+  }
+
+  // 6. Kod EAN-13 znaleziony w tekście OCR (np. 590...)
+  const eanMatch = rawText.match(/(?:590[0-9]{10}|[0-9]{13})/);
+  if (eanMatch && !eanMatch[0].startsWith('147')) {
+    return eanMatch[0];
+  }
+
+  // 7. Ogólny fallback na dowolny ciąg 8 cyfr po usunięciu śmieci
   const cleanDigits = rawText.replace(/[^0-9]/g, ' ');
-
-  // 1. NAJWYŻSZY PRIORYTET: 8-cyfrowy numer referencyjny artykułu (np. 44813216, 99146892)
-  const eightMatches = cleanDigits.match(/\b(\d{8})\b/g) || [];
-  const pure8 = eightMatches.filter((r) => !r.startsWith('147'));
-  if (pure8.length > 0) {
-    return pure8[0];
-  }
-
-  // 2. Poziomy kod kreskowy towaru ze skanera klienta (EAN-13)
-  if (clientBarcodeCode && !clientBarcodeCode.startsWith('147') && clientBarcodeCode.length <= 13) {
-    return clientBarcodeCode;
-  }
-
-  // 3. Kod EAN-13 znaleziony w tekście OCR
-  const eanMatch = cleanDigits.match(/\b(590\d{10}|\d{13})\b/);
-  if (eanMatch && !eanMatch[1].startsWith('147')) {
-    return eanMatch[1];
+  const fallback8 = cleanDigits.match(/\b(\d{8})\b/g) || [];
+  const pureFallback = fallback8.filter((r) => !r.startsWith('147'));
+  if (pureFallback.length > 0) {
+    return pureFallback[0];
   }
 
   return '';

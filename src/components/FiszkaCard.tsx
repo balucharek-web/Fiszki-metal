@@ -68,15 +68,15 @@ export const FiszkaCard: React.FC<FiszkaCardProps> = ({
         </span>
       )}
 
-      {/* 1. LEFT SECTION: 1:1 Logo STANDERS (BEZ pionowej linii dzielącej!) */}
+      {/* 1. LEFT SECTION: 1:1 Logo STANDERS (Dokładnie 5.4 cm szerokości zgodnie ze zwymiarowaniem) */}
       <div
-        className="flex items-center justify-center px-[3mm] py-[2mm] bg-white shrink-0 select-none h-full"
-        style={{ width: '42mm' }}
+        className="flex items-center justify-center px-[3mm] py-[2mm] bg-white shrink-0 select-none h-full border-r border-slate-200"
+        style={{ width: '54mm', minWidth: '54mm', maxWidth: '54mm' }}
       >
         <img
           src="./assets/standers_logo_transparent.png"
           alt="STANDERS"
-          className="max-h-[30mm] max-w-[37mm] object-contain select-none"
+          className="max-h-[30mm] max-w-[46mm] object-contain select-none"
         />
       </div>
 
@@ -150,13 +150,13 @@ export const FiszkaCard: React.FC<FiszkaCardProps> = ({
           )}
         </div>
 
-        {/* Row 3: Zielony pasek DOKŁADNIE 7,5 cm (75mm) */}
+        {/* Row 3: Zielony pasek DOKŁADNIE 7,4 cm (74mm) zgodnie ze zwymiarowaniem */}
         <div
           className="flex items-center justify-between rounded-lg px-[3mm] py-[1mm]"
           style={{
-            width: '75mm',
-            minWidth: '75mm',
-            maxWidth: '75mm',
+            width: '74mm',
+            minWidth: '74mm',
+            maxWidth: '74mm',
             backgroundColor: settings.badgeColor || '#d7f5c5',
             minHeight: '12.2mm',
             maxHeight: '12.8mm',
@@ -210,19 +210,19 @@ export const FiszkaCard: React.FC<FiszkaCardProps> = ({
         </div>
       </div>
 
-      {/* 3. RIGHT SECTION: Czarna ramka 5.5 cm szerokości × 3.7 cm wysokości z marginesem 5mm od końca */}
+      {/* 3. RIGHT SECTION: Dokładnie 5.5 cm (55mm) szerokości × 3.7 cm wysokości */}
       {settings.showRightSection && (
         <div
-          className="flex items-center justify-end shrink-0 pr-[5mm]"
-          style={{ width: '60mm', height: '40mm' }}
+          className="flex items-center justify-center shrink-0 border-l border-slate-200"
+          style={{ width: '55mm', minWidth: '55mm', maxWidth: '55mm', height: '40mm' }}
         >
           <div
             className="box-border border border-black bg-white flex flex-col justify-between items-end p-[2.5mm] overflow-hidden"
             style={{
-              width: '55mm',
+              width: '53.5mm',
               height: '37mm',
-              minWidth: '55mm',
-              maxWidth: '55mm',
+              minWidth: '53.5mm',
+              maxWidth: '53.5mm',
               minHeight: '37mm',
               maxHeight: '37mm',
             }}

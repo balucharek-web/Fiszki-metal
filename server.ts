@@ -50,12 +50,14 @@ BARDZO WAŻNE REGUŁY EKSTRAKCJI:
    - BEZWZGLĘDNIE ZIGNORUJ pionowy kod kreskowy! To jest techniczny kod seryjny zawieszki ESL (np. 1474507509...). NIGDY nie używaj go jako numeru referencyjnego ani kodu wagi!
 
 2. NUMER REFERENCYJNY (refNumber):
-   - NAJWYŻSZY PRIORYTET: 8-cyfrowy numer referencyjny artykułu (np. "44813216", "99146892", "42660255"). Na wyświetlaczu ESL znajduje się pod rozmiarem i nad słowem ZAPAS.
-   - DRUGI PRIORYTET (jeśli brak 8-cyfrowego ref): 13-cyfrowy kod EAN (np. "5901171215598") przy poziomym kodzie kreskowym na dole wyświetlacza (usuń przyrostki tekstowe jak APS).
-   - Wartość refNumber musi zawierać tylko czyste cyfry.
+   - NAJWYŻSZY PRIORYTET: 8-cyfrowy numer referencyjny artykułu Leroy Merlin (np. "44813216", "99146892", "42660255", "42660256").
+   - Na elektronicznych wyświetlaczach ESL e-papier znajduje się on ZAWSZE w lewej kolumnie, POD rozmiarem (np. pod "6X90 MM" lub "4X12") i DOKŁADNIE NAD słowem "ZAPAS: X".
+   - Na fiszkach i etykietach papierowych znajduje się obok napisu "Ref:" (np. "Ref: 42660256").
+   - DRUGI PRIORYTET (gdyby 8-cyfrowy ref był niewidoczny): 13-cyfrowy kod EAN towaru z poziomego kodu kreskowego na dole wyświetlacza (usuń przyrostek tekstu np. "APS").
+   - Wartość refNumber musi zawierać wyłącznie czyste cyfry (8 lub 13 cyfr).
 
 3. KOD WAGI / NUMER NA WADZE (scaleCode):
-   - ZAWSZE go odczytaj! To liczba 2- lub 3-cyfrowa (np. "169", "246", "980", "170").
+   - ZAWSZE go odczytaj! To liczba 2- lub 3-cyfrowa (np. "169", "246", "980", "170", "247").
    - ZWYKLE znajduje się NA SAMYM POCZĄTKU pierwszej linijki tekstu przed nazwą (np. z "169 WKRĘT UNIWERSALNY" kod wagi to "169").
    - Może być też w osobnym polu lub wyróżniony dużą czcionką.
 
@@ -66,14 +68,14 @@ BARDZO WAŻNE REGUŁY EKSTRAKCJI:
    - Wymiar produktu (np. "6x90 mm", "5x70 mm", "4x12 mm", "4.5x50 mm", "M6x50"). Zawsze dodaj "mm".
 
 6. CENA (priceText):
-   - Cena z jednostką (np. "38,49 zł/kg", "4,98 zł/kg" lub domyślnie "Cena").
+   - Cena z jednostką (np. "38,49 zł/kg", "62,49 zł/kg" lub domyślnie "Cena").
 
 7. WIELE POZYCJI:
-   - Skup się na głównej etykiecie na pierwszym planie (ignoruj rozmyte półki w tle). Jeśli w kadrze jest listwa z kilkoma ostrymi etykietami, zwróć je po kolei.`;
+   - Skup się na głównej etykiecie na pierwszym planie. Jeśli w kadrze jest listwa z kilkoma ostrymi etykietami, zwróć je po kolei.`;
 
     const modelConfig = {
       systemInstruction:
-        'Zwracaj wyłącznie tablicę JSON z odczytanymi danymi etykiet. Ignoruj pionowe kody seryjne ESL. Preferuj 8-cyfrowy numer referencyjny artykułu, a w razie braku kod EAN-13.',
+        'Zwracaj wyłącznie tablicę JSON z odczytanymi danymi etykiet. Ignoruj pionowe kody seryjne ESL (zaczynające się od 147). Bezwzględnie odczytaj 8-cyfrowy numer referencyjny artykułu LM (znajdujący się nad słowem ZAPAS), kod wagi (np. 169, 980), wymiar oraz nazwę.',
       responseMimeType: 'application/json',
       responseSchema: {
         type: Type.ARRAY,
@@ -108,9 +110,9 @@ BARDZO WAŻNE REGUŁY EKSTRAKCJI:
 
     let response;
     try {
-      // Primary: gemini-flash-latest
+      // Primary: gemini-3.1-flash-lite
       response = await ai.models.generateContent({
-        model: 'gemini-flash-latest',
+        model: 'gemini-3.1-flash-lite',
         contents: {
           parts: [
             {
@@ -127,9 +129,9 @@ BARDZO WAŻNE REGUŁY EKSTRAKCJI:
         config: modelConfig,
       });
     } catch (err: any) {
-      console.warn('Fallback do gemini-3.1-flash-lite:', err?.message);
+      console.warn('Fallback do gemini-3.8-flash:', err?.message);
       response = await ai.models.generateContent({
-        model: 'gemini-3.1-flash-lite',
+        model: 'gemini-3.8-flash',
         contents: {
           parts: [
             {
