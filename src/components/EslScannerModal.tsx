@@ -18,10 +18,20 @@ import {
   ShieldAlert,
   Smartphone,
   Barcode,
+  CheckCircle2,
+  Activity,
+  Zap,
+  ShieldCheck,
 } from 'lucide-react';
 import { FiszkaItem } from '../types/label';
 import { scanBarcodeClientSide, DecodedBarcodeResult } from '../utils/barcodeScanner';
 import { scanEslWithClientOcr, OcrRecognizedLabel } from '../utils/eslOcrScanner';
+import {
+  getDownsampledGrayscale,
+  calculateLaplacianSharpness,
+  calculateMotionDifference,
+  captureSharpestFrameFromVideo,
+} from '../utils/cameraStabilizer';
 
 interface EslScannerModalProps {
   isOpen: boolean;
@@ -67,6 +77,17 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
   const [availableDevices, setAvailableDevices] = useState<MediaDeviceInfo[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<string>('');
   const streamRef = useRef<MediaStream | null>(null);
+
+  // Stabilizacja obrazu i redukcja drgań ręki (Anti-Shake)
+  const [isAntiShakeEnabled, setIsAntiShakeEnabled] = useState(true);
+  const [autoCaptureOnSteady, setAutoCaptureOnSteady] = useState(false);
+  const [isCameraSteady, setIsCameraSteady] = useState(false);
+  const [motionLevel, setMotionLevel] = useState<'steady' | 'moving' | 'analyzing'>('analyzing');
+  const [sharpnessLevel, setSharpnessLevel] = useState<number>(0);
+  const [isCapturingBurst, setIsCapturingBurst] = useState(false);
+  const prevGrayRef = useRef<Uint8Array | null>(null);
+  const steadySinceRef = useRef<number>(0);
+  const isCapturingRef = useRef<boolean>(false);
 
   // Stop camera when closing
   useEffect(() => {
@@ -181,11 +202,37 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
       try {
         const constraints: MediaStreamConstraints = deviceId
           ? { video: { deviceId: { exact: deviceId } } }
-          : { video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 } } };
+          : {
+              video: {
+                facingMode: { ideal: 'environment' },
+                width: { ideal: 1920 },
+                height: { ideal: 1080 },
+              },
+            };
         stream = await navigator.mediaDevices.getUserMedia(constraints);
       } catch (err1) {
         console.warn('Pierwsza próba kamery z parametrami nie powiodła się, próba standardowa:', err1);
         stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      }
+
+      // Spróbuj aktywować sprzętową stabilizację i ciągły autofokus jeśli przeglądarka wspiera
+      try {
+        const track = stream.getVideoTracks()?.[0];
+        if (track && 'applyConstraints' in track) {
+          const capabilities: any = (track as any).getCapabilities ? (track as any).getCapabilities() : {};
+          const advancedList: any[] = [];
+          if (capabilities.focusMode && capabilities.focusMode.includes('continuous')) {
+            advancedList.push({ focusMode: 'continuous' });
+          }
+          if (capabilities.imageStabilizationMode) {
+            advancedList.push({ imageStabilizationMode: 'auto' });
+          }
+          if (advancedList.length > 0) {
+            await (track as any).applyConstraints({ advanced: advancedList }).catch(() => {});
+          }
+        }
+      } catch {
+        // Ignoruj jeśli przeglądarka nie pozwala na zaawansowane parametry sprzętowe
       }
 
       streamRef.current = stream;
@@ -235,25 +282,98 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
     }
   };
 
+  // Pętla monitorowania stabilności i ostrości w czasie rzeczywistym
+  useEffect(() => {
+    if (!isCameraActive) {
+      prevGrayRef.current = null;
+      setIsCameraSteady(false);
+      setMotionLevel('analyzing');
+      steadySinceRef.current = 0;
+      return;
+    }
+
+    const intervalId = setInterval(() => {
+      const video = videoRef.current;
+      if (!video || video.readyState < 2 || video.paused || isCapturingRef.current) return;
+
+      const currentGray = getDownsampledGrayscale(video, 120, 90);
+      if (!currentGray) return;
+
+      const sharpness = calculateLaplacianSharpness(currentGray, 120, 90);
+      setSharpnessLevel(Math.round(sharpness));
+
+      if (prevGrayRef.current) {
+        const motionDiff = calculateMotionDifference(prevGrayRef.current, currentGray);
+        // Telefon trzymany nieruchomo: motionDiff < 8.0 oraz ostrość > 18
+        const steady = motionDiff < 8.0 && sharpness > 18;
+        setIsCameraSteady(steady);
+        setMotionLevel(steady ? 'steady' : 'moving');
+
+        const now = Date.now();
+        if (steady) {
+          if (steadySinceRef.current === 0) {
+            steadySinceRef.current = now;
+          } else if (
+            autoCaptureOnSteady &&
+            now - steadySinceRef.current >= 550 &&
+            !isScanning &&
+            !isCapturingRef.current
+          ) {
+            steadySinceRef.current = 0;
+            captureCameraPhoto();
+          }
+        } else {
+          steadySinceRef.current = 0;
+        }
+      }
+
+      prevGrayRef.current = currentGray;
+    }, 130);
+
+    return () => clearInterval(intervalId);
+  }, [isCameraActive, autoCaptureOnSteady, isScanning]);
+
   const captureCameraPhoto = async () => {
-    if (!videoRef.current) return;
+    if (!videoRef.current || isCapturingRef.current) return;
     const video = videoRef.current;
     if (video.videoWidth === 0 || video.videoHeight === 0) {
       setErrorMsg('Kamera jeszcze się nie załadowała. Odczekaj chwilę i kliknij ponownie.');
       return;
     }
-    const canvas = document.createElement('canvas');
-    canvas.width = video.videoWidth || 1280;
-    canvas.height = video.videoHeight || 720;
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
 
-    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-    const dataUrl = canvas.toDataURL('image/jpeg', 0.90);
-    setImagePreview(dataUrl);
-    // Kamera pozostaje włączona, aby umożliwić płynne skanowanie kolejnych etykiet z rzędu
-    const compressed = await compressImageForApi(dataUrl, 1920);
-    runRecognition(compressed, 'image/jpeg');
+    try {
+      isCapturingRef.current = true;
+      setIsCapturingBurst(true);
+
+      let finalDataUrl = '';
+      if (isAntiShakeEnabled) {
+        setScanStatusText('Stabilizator Anti-Shake: wybieranie najostrzejszej klatki...');
+        const burstResult = await captureSharpestFrameFromVideo(video, 4, 35);
+        finalDataUrl = burstResult.dataUrl;
+      } else {
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth || 1280;
+        canvas.height = video.videoHeight || 720;
+        const ctx = canvas.getContext('2d');
+        if (!ctx) return;
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        finalDataUrl = canvas.toDataURL('image/jpeg', 0.90);
+      }
+
+      if (!finalDataUrl) {
+        throw new Error('Nie udało się przechwycić klatki z kamery');
+      }
+
+      setImagePreview(finalDataUrl);
+      const compressed = await compressImageForApi(finalDataUrl, 1920);
+      await runRecognition(compressed, 'image/jpeg');
+    } catch (err: any) {
+      console.warn('Błąd podczas przechwytywania klatki:', err);
+      setErrorMsg('Nie udało się wykonać zdjęcia. Spróbuj ponownie.');
+    } finally {
+      setIsCapturingBurst(false);
+      isCapturingRef.current = false;
+    }
   };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -720,15 +840,59 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
                   className={`w-full h-full object-cover ${isCameraActive ? 'block' : 'hidden'}`}
                 />
 
-                {/* Siatka pomocnicza celownika etykiety ESL */}
+                {/* Siatka pomocnicza celownika etykiety ESL ze wskaźnikiem stabilizacji */}
                 {isCameraActive && (
-                  <div className="absolute inset-6 border-2 border-dashed border-emerald-400/70 rounded-xl pointer-events-none flex flex-col justify-between p-3">
-                    <div className="flex justify-between items-center text-[11px] text-emerald-300 bg-black/60 backdrop-blur-xs px-2.5 py-1 rounded-md">
-                      <span>Etykieta ESL / Kod regału</span>
-                      <span>19.5 x 4 cm</span>
+                  <div
+                    className={`absolute inset-4 sm:inset-6 border-2 rounded-xl pointer-events-none flex flex-col justify-between p-3 transition-all duration-200 ${
+                      isCameraSteady
+                        ? 'border-emerald-400 bg-emerald-500/5 shadow-[0_0_20px_rgba(52,211,153,0.35)]'
+                        : 'border-amber-400/80 border-dashed bg-amber-500/5'
+                    }`}
+                  >
+                    <div className="flex justify-between items-center text-[11px] gap-2">
+                      <div className="text-emerald-300 bg-black/70 backdrop-blur-xs px-2.5 py-1 rounded-md flex items-center gap-1.5 font-medium">
+                        <span>Etykieta ESL</span>
+                        <span className="text-[10px] text-slate-400 hidden xs:inline">19.5 x 4 cm</span>
+                      </div>
+
+                      {/* Wskaźnik stabilności i braku drgań ręki na żywo */}
+                      <div
+                        className={`px-2.5 py-1 rounded-md text-[11px] font-bold flex items-center gap-1.5 shadow-md transition-all ${
+                          isCameraSteady
+                            ? 'bg-emerald-600/90 text-white'
+                            : 'bg-amber-600/90 text-white animate-pulse'
+                        }`}
+                      >
+                        {isCameraSteady ? (
+                          <>
+                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-200" />
+                            <span>Kadr stabilny (ostry)</span>
+                          </>
+                        ) : (
+                          <>
+                            <Activity className="w-3.5 h-3.5 text-amber-200" />
+                            <span>Trzymaj nieruchomo (redukcja drgań)</span>
+                          </>
+                        )}
+                      </div>
                     </div>
-                    <div className="text-center text-[10px] text-emerald-200 bg-black/60 backdrop-blur-xs py-1 px-3 rounded-md self-center">
-                      Skieruj aparat na etykietę lub kod i kliknij przycisk poniżej
+
+                    <div className="flex justify-center items-center">
+                      {isCapturingBurst ? (
+                        <div className="text-center text-xs text-white bg-emerald-600/95 font-bold px-3.5 py-1.5 rounded-lg shadow-xl flex items-center gap-2">
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                          <span>Anti-Shake: dobieranie najostrzejszej klatki z serii...</span>
+                        </div>
+                      ) : autoCaptureOnSteady ? (
+                        <div className="text-center text-[10px] text-emerald-200 bg-black/75 backdrop-blur-xs py-1 px-3 rounded-md flex items-center gap-1.5 border border-emerald-500/40">
+                          <Zap className="w-3 h-3 text-emerald-400 animate-bounce" />
+                          <span>Auto-strzał: przytrzymaj nieruchomo przez ułamek sekundy</span>
+                        </div>
+                      ) : (
+                        <div className="text-center text-[10px] text-slate-300 bg-black/65 backdrop-blur-xs py-1 px-3 rounded-md">
+                          Stabilizator Anti-Shake automatycznie eliminuje rozmycie drżenia ręki
+                        </div>
+                      )}
                     </div>
                   </div>
                 )}
@@ -826,51 +990,90 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
                 )}
               </div>
 
-              {/* Przyciski kontroli kamery aktywnej */}
+              {/* Przyciski kontroli kamery aktywnej i opcje stabilizatora */}
               {isCameraActive && (
-                <div className="flex items-center gap-3 flex-wrap justify-center">
-                  {availableDevices.length > 1 && (
-                    <select
-                      value={selectedDeviceId}
-                      onChange={(e) => {
-                        setSelectedDeviceId(e.target.value);
-                        startCamera(e.target.value);
-                      }}
-                      className="px-2.5 py-1.5 text-xs bg-slate-800 text-slate-200 border border-slate-700 rounded-lg cursor-pointer"
+                <div className="flex flex-col items-center gap-2.5 w-full">
+                  <div className="flex items-center gap-3 flex-wrap justify-center">
+                    {availableDevices.length > 1 && (
+                      <select
+                        value={selectedDeviceId}
+                        onChange={(e) => {
+                          setSelectedDeviceId(e.target.value);
+                          startCamera(e.target.value);
+                        }}
+                        className="px-2.5 py-1.5 text-xs bg-slate-800 text-slate-200 border border-slate-700 rounded-lg cursor-pointer"
+                      >
+                        {availableDevices.map((dev, idx) => (
+                          <option key={dev.deviceId} value={dev.deviceId}>
+                            {dev.label || `Kamera ${idx + 1}`}
+                          </option>
+                        ))}
+                      </select>
+                    )}
+
+                    <button
+                      onClick={captureCameraPhoto}
+                      disabled={isScanning || isCapturingBurst}
+                      className={`px-5 py-2.5 active:scale-95 text-white font-bold text-xs rounded-xl flex items-center gap-2 shadow-lg transition-all cursor-pointer ${
+                        isCameraSteady
+                          ? 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-900/50'
+                          : 'bg-emerald-700 hover:bg-emerald-600'
+                      }`}
                     >
-                      {availableDevices.map((dev, idx) => (
-                        <option key={dev.deviceId} value={dev.deviceId}>
-                          {dev.label || `Kamera ${idx + 1}`}
-                        </option>
-                      ))}
-                    </select>
-                  )}
+                      <Camera className="w-4 h-4" />
+                      <span>
+                        {isCapturingBurst
+                          ? 'Wybieranie ostrości...'
+                          : recognizedItems.length > 0
+                          ? `Zeskanuj kolejną (#${recognizedItems.length + 1})`
+                          : 'Zrób zdjęcie i odczytaj'}
+                      </span>
+                    </button>
 
-                  <button
-                    onClick={captureCameraPhoto}
-                    disabled={isScanning}
-                    className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 active:scale-95 text-white font-bold text-xs rounded-xl flex items-center gap-2 shadow-lg transition-all cursor-pointer"
-                  >
-                    <Camera className="w-4 h-4" />
-                    <span>
-                      {recognizedItems.length > 0
-                        ? `Zeskanuj kolejną (#${recognizedItems.length + 1})`
-                        : 'Zrób zdjęcie i odczytaj'}
-                    </span>
-                  </button>
+                    <button
+                      onClick={() => nativeCameraInputRef.current?.click()}
+                      className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs rounded-xl flex items-center gap-1.5 transition-all cursor-pointer border border-slate-700"
+                      title="Użyj natywnego aparatu urządzenia (wyższa rozdzielczość)"
+                    >
+                      <Smartphone className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>
+                        {recognizedItems.length > 0
+                          ? `Kolejne aparatem (#${recognizedItems.length + 1})`
+                          : 'Aparat natywny'}
+                      </span>
+                    </button>
+                  </div>
 
-                  <button
-                    onClick={() => nativeCameraInputRef.current?.click()}
-                    className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 font-semibold text-xs rounded-xl flex items-center gap-1.5 transition-all cursor-pointer border border-slate-700"
-                    title="Użyj natywnego aparatu urządzenia (wyższa rozdzielczość)"
-                  >
-                    <Smartphone className="w-3.5 h-3.5 text-emerald-400" />
-                    <span>
-                      {recognizedItems.length > 0
-                        ? `Kolejne aparatem (#${recognizedItems.length + 1})`
-                        : 'Aparat natywny'}
-                    </span>
-                  </button>
+                  {/* Pasek przełączników stabilizacji i auto-strzału */}
+                  <div className="flex items-center gap-2 flex-wrap justify-center pt-1 text-[11px]">
+                    <button
+                      type="button"
+                      onClick={() => setIsAntiShakeEnabled(!isAntiShakeEnabled)}
+                      className={`px-2.5 py-1 rounded-lg flex items-center gap-1.5 font-medium transition-all cursor-pointer border ${
+                        isAntiShakeEnabled
+                          ? 'bg-emerald-950/80 text-emerald-300 border-emerald-500/40'
+                          : 'bg-slate-800 text-slate-400 border-slate-700'
+                      }`}
+                      title="Eliminuje rozmycie wywołane naciśnięciem ekranu poprzez serię klatek i wybór najostrzejszej"
+                    >
+                      <ShieldCheck className={`w-3.5 h-3.5 ${isAntiShakeEnabled ? 'text-emerald-400' : 'text-slate-500'}`} />
+                      <span>Stabilizator Anti-Shake: {isAntiShakeEnabled ? 'WŁ' : 'WYŁ'}</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setAutoCaptureOnSteady(!autoCaptureOnSteady)}
+                      className={`px-2.5 py-1 rounded-lg flex items-center gap-1.5 font-medium transition-all cursor-pointer border ${
+                        autoCaptureOnSteady
+                          ? 'bg-emerald-500 text-slate-950 font-bold border-emerald-400 shadow-xs'
+                          : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-slate-300'
+                      }`}
+                      title="Gdy przytrzymasz telefon nieruchomo przed etykietą, zdjęcie zostanie zrobione automatycznie bez dotykania ekranu"
+                    >
+                      <Zap className={`w-3.5 h-3.5 ${autoCaptureOnSteady ? 'text-slate-950' : 'text-slate-400'}`} />
+                      <span>Auto-strzał po ustabilizowaniu: {autoCaptureOnSteady ? 'WŁ' : 'WYŁ'}</span>
+                    </button>
+                  </div>
                 </div>
               )}
             </div>
