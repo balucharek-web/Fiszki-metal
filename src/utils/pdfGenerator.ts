@@ -172,7 +172,7 @@ export async function generateFillablePdf(
       const middleX = xLeft + logoAreaWidth + 2 * MM_TO_PT;
       const middleWidth = (195 - 49 - 60 - 3) * MM_TO_PT;
 
-      // Row 1: Nazwa towaru (np. "Wkręt do drewna")
+      // Row 1: Nazwa towaru (np. "Wkręt do drewna") - obniżona do wysokości logo Standers
       const nameField = form.createTextField(`fiszka_${globalIdx + 1}_nazwa`);
       if (item.name) {
         nameField.setText(item.name);
@@ -180,9 +180,9 @@ export async function generateFillablePdf(
       nameField.setAlignment(TextAlignment.Left);
       nameField.addToPage(page, {
         x: middleX,
-        y: yBottom + 25.5 * MM_TO_PT,
+        y: yBottom + 22.5 * MM_TO_PT,
         width: middleWidth,
-        height: 11 * MM_TO_PT,
+        height: 9.5 * MM_TO_PT,
         borderWidth: 0,
         font: boldFont,
       });
@@ -200,7 +200,7 @@ export async function generateFillablePdf(
       }
       attachAutoClearAction(nameField, `nazwa_${globalIdx + 1}`);
 
-      // Row 2: Wymiar (np. "6x80 mm") - wyraźnie pogrubiony
+      // Row 2: Wymiar (np. "6x80 mm") - bezpośrednio nad zielonym paskiem wagi
       const dimField = form.createTextField(`fiszka_${globalIdx + 1}_wymiar`);
       if (item.dimension) {
         dimField.setText(item.dimension);
@@ -208,9 +208,9 @@ export async function generateFillablePdf(
       dimField.setAlignment(TextAlignment.Left);
       dimField.addToPage(page, {
         x: middleX,
-        y: yBottom + 14 * MM_TO_PT,
+        y: yBottom + 14.5 * MM_TO_PT,
         width: middleWidth,
-        height: 11 * MM_TO_PT,
+        height: 7.5 * MM_TO_PT,
         borderWidth: 0,
         font: boldFont,
       });

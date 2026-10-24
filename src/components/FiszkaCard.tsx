@@ -80,9 +80,9 @@ export const FiszkaCard: React.FC<FiszkaCardProps> = ({
         />
       </div>
 
-      {/* 2. MIDDLE SECTION: Nazwa, Wymiar (wyraźnie pogrubiony), Pasek wagi (napis i numer ekstra pogrubiony) */}
-      <div className="flex-1 flex flex-col justify-between px-[3.5mm] py-[2mm] overflow-hidden h-full">
-        {/* Row 1: Product Name ("Wkręt do drewna") */}
+      {/* 2. MIDDLE SECTION: Nazwa (na równo z logo), Wymiar (od razu nad paskiem wagi), Pasek wagi (Leroy Merlin Sans Bold) */}
+      <div className="flex-1 flex flex-col justify-between px-[3.5mm] pt-[4.2mm] pb-[1.8mm] overflow-hidden h-full">
+        {/* Row 1: Product Name ("Wkręt do drewna") - na wysokości logo Standers */}
         <div className="w-full">
           {!isPrintMode ? (
             <input
@@ -116,96 +116,99 @@ export const FiszkaCard: React.FC<FiszkaCardProps> = ({
           )}
         </div>
 
-        {/* Row 2: Dimension / Size ("6x80 mm") - WYRAŹNIE MOCNO POGRUBIONY */}
-        <div className="w-full">
-          {!isPrintMode ? (
-            <input
-              type="text"
-              value={item.dimension}
-              onChange={(e) => handleTextChange('dimension', e.target.value)}
-              onFocus={() => handleFocus('dimension', item.dimension)}
-              onBlur={() => handleBlur('dimension', item.dimension)}
-              placeholder="6x80 mm"
-              className="w-full text-black bg-transparent border-b border-transparent hover:border-slate-300 focus:border-emerald-600 focus:bg-emerald-50/40 focus:outline-none transition-colors px-1 py-0.5 rounded-xs tracking-tight"
-              style={{
-                fontSize: '5.9mm',
-                lineHeight: 1.1,
-                fontFamily: "'Leroy Merlin Sans', sans-serif",
-                fontWeight: 800,
-              }}
-              title="Kliknij, aby zmienić wymiar (czyści się automatycznie)"
-            />
-          ) : (
-            <div
-              className="text-black truncate px-1 tracking-tight"
-              style={{
-                fontSize: '5.9mm',
-                lineHeight: 1.1,
-                fontFamily: "'Leroy Merlin Sans', sans-serif",
-                fontWeight: 800,
-              }}
-            >
-              {item.dimension || '6x80 mm'}
-            </div>
-          )}
-        </div>
-
-        {/* Row 3: Zielony pasek (zwiększony o 5mm do 74mm) */}
-        <div
-          className="flex items-center justify-between rounded-lg px-[3mm] py-[1mm]"
-          style={{
-            width: '74mm',
-            minWidth: '74mm',
-            maxWidth: '74mm',
-            backgroundColor: settings.badgeColor || '#d7f5c5',
-            minHeight: '12.2mm',
-            maxHeight: '12.8mm',
-          }}
-        >
-          <div className="flex items-center select-none shrink-0">
-            <span
-              className="text-black tracking-tight"
-              style={{
-                fontSize: '4.4mm',
-                fontFamily: "'Leroy Merlin Sans', sans-serif",
-                fontWeight: 800,
-              }}
-            >
-              {settings.scaleLabelText || 'Wpisz na wadze:'}
-            </span>
-          </div>
-
-          <div className="flex items-center justify-end flex-1 pl-1">
+        {/* Dolna grupa: Wymiar od razu nad paskiem wagi */}
+        <div className="w-full flex flex-col gap-[0.8mm]">
+          {/* Row 2: Dimension / Size ("6x80 mm") - bezpośrednio nad polem wagi */}
+          <div className="w-full">
             {!isPrintMode ? (
               <input
                 type="text"
-                value={item.scaleCode}
-                onChange={(e) => handleTextChange('scaleCode', e.target.value)}
-                onFocus={() => handleFocus('scaleCode', item.scaleCode)}
-                onBlur={() => handleBlur('scaleCode', item.scaleCode)}
-                placeholder="247"
-                className="w-full text-right text-black bg-transparent border-b border-transparent hover:border-slate-500 focus:border-black focus:bg-white/40 focus:outline-none px-1 rounded-xs tracking-tight tabular-nums"
+                value={item.dimension}
+                onChange={(e) => handleTextChange('dimension', e.target.value)}
+                onFocus={() => handleFocus('dimension', item.dimension)}
+                onBlur={() => handleBlur('dimension', item.dimension)}
+                placeholder="6x80 mm"
+                className="w-full text-black bg-transparent border-b border-transparent hover:border-slate-300 focus:border-emerald-600 focus:bg-emerald-50/40 focus:outline-none transition-colors px-1 py-0.2 rounded-xs tracking-tight"
                 style={{
-                  fontSize: '9mm',
-                  lineHeight: 1,
-                  fontFamily: "'Leroy Merlin Sans', monospace, sans-serif",
-                  fontWeight: 900,
+                  fontSize: '5.9mm',
+                  lineHeight: 1.1,
+                  fontFamily: "'Leroy Merlin Sans', sans-serif",
+                  fontWeight: 800,
                 }}
-                title="Kliknij, aby zmienić numer na wadze (czyści się automatycznie)"
+                title="Kliknij, aby zmienić wymiar (czyści się automatycznie)"
               />
             ) : (
-              <span
-                className="text-black text-right tracking-tight tabular-nums px-1"
+              <div
+                className="text-black truncate px-1 tracking-tight"
                 style={{
-                  fontSize: '9mm',
-                  lineHeight: 1,
-                  fontFamily: "'Leroy Merlin Sans', monospace, sans-serif",
-                  fontWeight: 900,
+                  fontSize: '5.9mm',
+                  lineHeight: 1.1,
+                  fontFamily: "'Leroy Merlin Sans', sans-serif",
+                  fontWeight: 800,
                 }}
               >
-                {item.scaleCode || '247'}
-              </span>
+                {item.dimension || '6x80 mm'}
+              </div>
             )}
+          </div>
+
+          {/* Row 3: Zielony pasek (czcionka Leroy Merlin Sans Bold dla napisu i numeru) */}
+          <div
+            className="flex items-center justify-between rounded-lg px-[3mm] py-[1mm]"
+            style={{
+              width: '74mm',
+              minWidth: '74mm',
+              maxWidth: '74mm',
+              backgroundColor: settings.badgeColor || '#d7f5c5',
+              minHeight: '12.2mm',
+              maxHeight: '12.8mm',
+            }}
+          >
+            <div className="flex items-center select-none shrink-0">
+              <span
+                className="text-black tracking-tight"
+                style={{
+                  fontSize: '4.4mm',
+                  fontFamily: "'Leroy Merlin Sans', sans-serif",
+                  fontWeight: 700,
+                }}
+              >
+                {settings.scaleLabelText || 'Wpisz na wadze:'}
+              </span>
+            </div>
+
+            <div className="flex items-center justify-end flex-1 pl-1">
+              {!isPrintMode ? (
+                <input
+                  type="text"
+                  value={item.scaleCode}
+                  onChange={(e) => handleTextChange('scaleCode', e.target.value)}
+                  onFocus={() => handleFocus('scaleCode', item.scaleCode)}
+                  onBlur={() => handleBlur('scaleCode', item.scaleCode)}
+                  placeholder="247"
+                  className="w-full text-right text-black bg-transparent border-b border-transparent hover:border-slate-500 focus:border-black focus:bg-white/40 focus:outline-none px-1 rounded-xs tracking-tight tabular-nums"
+                  style={{
+                    fontSize: '9mm',
+                    lineHeight: 1,
+                    fontFamily: "'Leroy Merlin Sans', sans-serif",
+                    fontWeight: 700,
+                  }}
+                  title="Kliknij, aby zmienić numer na wadze (czyści się automatycznie)"
+                />
+              ) : (
+                <span
+                  className="text-black text-right tracking-tight tabular-nums px-1"
+                  style={{
+                    fontSize: '9mm',
+                    lineHeight: 1,
+                    fontFamily: "'Leroy Merlin Sans', sans-serif",
+                    fontWeight: 700,
+                  }}
+                >
+                  {item.scaleCode || '247'}
+                </span>
+              )}
+            </div>
           </div>
         </div>
       </div>
