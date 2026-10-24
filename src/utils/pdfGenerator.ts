@@ -157,18 +157,18 @@ export async function generateFillablePdf(
         color: rgb(1, 1, 1),
       });
 
-      // 2. Left Section: 1:1 STANDERS Logo (dokładnie 5.4 cm szerokości zgodnie ze zwymiarowaniem)
-      const logoAreaWidth = 54 * MM_TO_PT;
+      // 2. Left Section: STANDERS Logo (nieco mniejsze, 4.9 cm szerokości)
+      const logoAreaWidth = 49 * MM_TO_PT;
       if (embeddedLogo) {
         page.drawImage(embeddedLogo, {
-          x: xLeft + ((54 - 38) / 2) * MM_TO_PT,
-          y: yBottom + 8.5 * MM_TO_PT,
-          width: 38 * MM_TO_PT,
-          height: 23 * MM_TO_PT,
+          x: xLeft + ((49 - 32) / 2) * MM_TO_PT,
+          y: yBottom + 10 * MM_TO_PT,
+          width: 32 * MM_TO_PT,
+          height: 20 * MM_TO_PT,
         });
       }
 
-      // Pionowa linia podziału po sekcji logo (przy 5.4 cm)
+      // Pionowa linia podziału po sekcji logo (przy 4.9 cm)
       page.drawLine({
         start: { x: xLeft + logoAreaWidth, y: yBottom },
         end: { x: xLeft + logoAreaWidth, y: yBottom + labelHeight },
@@ -176,9 +176,9 @@ export async function generateFillablePdf(
         thickness: 0.5,
       });
 
-      // 3. Middle Section: (szerokość 8.6 cm, od 5.4 cm do 14.0 cm)
-      const middleX = xLeft + logoAreaWidth + 2.5 * MM_TO_PT;
-      const middleWidth = (195 - 54 - 55 - 4) * MM_TO_PT; // ~82 mm na tekst
+      // 3. Middle Section: przesunięty o 5mm w lewo
+      const middleX = xLeft + logoAreaWidth + 2 * MM_TO_PT;
+      const middleWidth = (195 - 49 - 60 - 3) * MM_TO_PT;
 
       // Row 1: Nazwa towaru (np. "Wkręt do drewna")
       const nameField = form.createTextField(`fiszka_${globalIdx + 1}_nazwa`);
@@ -236,10 +236,10 @@ export async function generateFillablePdf(
       }
       attachAutoClearAction(dimField, `wymiar_${globalIdx + 1}`);
 
-      // Row 3: Zaokrąglony zielony pasek DOKŁADNIE 7,4 cm (74mm) z numerem wagi (#d7f5c5)
+      // Row 3: Zaokrąglony zielony pasek (zmniejszony o 5mm do 69mm, przesunięty w lewo)
       const badgeX = middleX;
       const badgeY = yBottom + 1.8 * MM_TO_PT;
-      const badgeWidth = 74 * MM_TO_PT; // dokładnie 7.4 cm zgodnie ze zwymiarowaniem
+      const badgeWidth = 69 * MM_TO_PT; // zmniejszone o 5mm do 69mm
       const badgeHeight = 12.2 * MM_TO_PT;
       const badgeR = 2.5 * MM_TO_PT;
       const greenColor = rgb(0.843, 0.961, 0.773);
@@ -255,30 +255,30 @@ export async function generateFillablePdf(
 
       // "Wpisz na wadze:" - pojedynczy, czysty, ostry napis
       page.drawText('Wpisz na wadze:', {
-        x: badgeX + 3.2 * MM_TO_PT,
+        x: badgeX + 2.8 * MM_TO_PT,
         y: badgeY + 4.2 * MM_TO_PT,
-        size: 13.5,
+        size: 13,
         font: boldFont,
         color: rgb(0, 0, 0),
       });
 
-      // Numer na wadze - pogrubiony, duży (28pt) w czcionce Leroy Merlin Sans Bold
+      // Numer na wadze - pogrubiony, duży w czcionce Leroy Merlin Sans Bold
       const scaleField = form.createTextField(`fiszka_${globalIdx + 1}_waga`);
       if (item.scaleCode) {
         scaleField.setText(String(item.scaleCode));
       }
       scaleField.setAlignment(TextAlignment.Right);
       scaleField.addToPage(page, {
-        x: badgeX + badgeWidth - 32 * MM_TO_PT,
+        x: badgeX + badgeWidth - 30 * MM_TO_PT,
         y: badgeY + 0.8 * MM_TO_PT,
-        width: 30 * MM_TO_PT,
+        width: 28 * MM_TO_PT,
         height: 11.2 * MM_TO_PT,
         borderWidth: 0,
         font: boldFont,
       });
-      scaleField.setFontSize(28);
+      scaleField.setFontSize(27);
       scaleField.acroField.setDefaultAppearance(
-        customFontBold ? '/LMSBold 28 Tf 0 0 0 rg' : '/Helvetica-Bold 28 Tf 0 0 0 rg'
+        customFontBold ? '/LMSBold 27 Tf 0 0 0 rg' : '/Helvetica-Bold 27 Tf 0 0 0 rg'
       );
 
       const scaleWidget = scaleField.acroField.getWidgets()[0];
@@ -294,23 +294,14 @@ export async function generateFillablePdf(
       }
       attachAutoClearAction(scaleField, `waga_${globalIdx + 1}`);
 
-      // 4. Right Section: Dokładnie 5.5 cm szerokości (od 14.0 cm do 19.5 cm)
-      const frameSectionWidth = 55 * MM_TO_PT;
-      const frameX = xLeft + labelWidth - frameSectionWidth;
-      const frameY = yBottom + 1.5 * MM_TO_PT;
+      // 4. Right Section: Czarna ramka odsunięta o 5 mm od prawej krawędzi fiszki
       const frameWidth = 53.5 * MM_TO_PT;
       const frameHeight = 37 * MM_TO_PT;
-
-      // Pionowa linia podziału przed prawą sekcją (przy 14.0 cm)
-      page.drawLine({
-        start: { x: frameX, y: yBottom },
-        end: { x: frameX, y: yBottom + labelHeight },
-        color: rgb(0.88, 0.88, 0.88),
-        thickness: 0.5,
-      });
+      const frameX = xLeft + labelWidth - frameWidth - 5 * MM_TO_PT; // odsunięta o 5mm od prawej krawędzi
+      const frameY = yBottom + 1.5 * MM_TO_PT;
 
       page.drawRectangle({
-        x: frameX + 0.75 * MM_TO_PT,
+        x: frameX,
         y: frameY,
         width: frameWidth,
         height: frameHeight,
