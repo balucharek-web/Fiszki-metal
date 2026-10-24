@@ -96,7 +96,7 @@ export const FiszkaCard: React.FC<FiszkaCardProps> = ({
               style={{
                 fontSize: '4.8mm',
                 lineHeight: 1.15,
-                fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
+                fontFamily: "'Leroy Merlin Sans', sans-serif",
                 fontWeight: 700,
               }}
               title="Kliknij, aby zmienić nazwę towaru (czyści się automatycznie)"
@@ -107,7 +107,7 @@ export const FiszkaCard: React.FC<FiszkaCardProps> = ({
               style={{
                 fontSize: '4.8mm',
                 lineHeight: 1.15,
-                fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
+                fontFamily: "'Leroy Merlin Sans', sans-serif",
                 fontWeight: 700,
               }}
             >
@@ -130,8 +130,8 @@ export const FiszkaCard: React.FC<FiszkaCardProps> = ({
               style={{
                 fontSize: '5.9mm',
                 lineHeight: 1.1,
-                fontFamily: "'Plus Jakarta Sans', 'Inter', sans-serif",
-                fontWeight: 900,
+                fontFamily: "'Leroy Merlin Sans', sans-serif",
+                fontWeight: 800,
               }}
               title="Kliknij, aby zmienić wymiar (czyści się automatycznie)"
             />
@@ -141,8 +141,8 @@ export const FiszkaCard: React.FC<FiszkaCardProps> = ({
               style={{
                 fontSize: '5.9mm',
                 lineHeight: 1.1,
-                fontFamily: "'Plus Jakarta Sans', 'Inter', sans-serif",
-                fontWeight: 900,
+                fontFamily: "'Leroy Merlin Sans', sans-serif",
+                fontWeight: 800,
               }}
             >
               {item.dimension || '6x80 mm'}
@@ -167,7 +167,7 @@ export const FiszkaCard: React.FC<FiszkaCardProps> = ({
               className="text-black tracking-tight"
               style={{
                 fontSize: '4.4mm',
-                fontFamily: "'Plus Jakarta Sans', 'Inter', sans-serif",
+                fontFamily: "'Leroy Merlin Sans', sans-serif",
                 fontWeight: 800,
               }}
             >
@@ -184,22 +184,22 @@ export const FiszkaCard: React.FC<FiszkaCardProps> = ({
                 onFocus={() => handleFocus('scaleCode', item.scaleCode)}
                 onBlur={() => handleBlur('scaleCode', item.scaleCode)}
                 placeholder="247"
-                className="w-full text-right font-mono text-black bg-transparent border-b border-transparent hover:border-slate-500 focus:border-black focus:bg-white/40 focus:outline-none px-1 rounded-xs tracking-tight tabular-nums"
+                className="w-full text-right text-black bg-transparent border-b border-transparent hover:border-slate-500 focus:border-black focus:bg-white/40 focus:outline-none px-1 rounded-xs tracking-tight tabular-nums"
                 style={{
                   fontSize: '9.2mm',
                   lineHeight: 1,
-                  fontFamily: "'JetBrains Mono', monospace",
+                  fontFamily: "'Leroy Merlin Sans', monospace, sans-serif",
                   fontWeight: 900,
                 }}
                 title="Kliknij, aby zmienić numer na wadze (czyści się automatycznie)"
               />
             ) : (
               <span
-                className="font-mono text-black text-right tracking-tight tabular-nums px-1"
+                className="text-black text-right tracking-tight tabular-nums px-1"
                 style={{
                   fontSize: '9.2mm',
                   lineHeight: 1,
-                  fontFamily: "'JetBrains Mono', monospace",
+                  fontFamily: "'Leroy Merlin Sans', monospace, sans-serif",
                   fontWeight: 900,
                 }}
               >
@@ -238,13 +238,13 @@ export const FiszkaCard: React.FC<FiszkaCardProps> = ({
                   onBlur={() => handleBlur('priceText', item.priceText ?? 'Cena')}
                   placeholder="Cena"
                   className="w-full text-right text-black font-bold bg-transparent border-b border-transparent hover:border-slate-300 focus:border-emerald-600 focus:bg-emerald-50/30 focus:outline-none px-1 py-0.5 rounded-xs"
-                  style={{ fontSize: '3.8mm', lineHeight: 1.1, fontWeight: 700 }}
+                  style={{ fontSize: '3.8mm', lineHeight: 1.1, fontFamily: "'Leroy Merlin Sans', sans-serif", fontWeight: 700 }}
                   title="Kliknij, aby zmienić tekst Cena (czyści się automatycznie)"
                 />
               ) : (
                 <span
                   className="font-bold text-black px-1"
-                  style={{ fontSize: '3.8mm', lineHeight: 1.1, fontWeight: 700 }}
+                  style={{ fontSize: '3.8mm', lineHeight: 1.1, fontFamily: "'Leroy Merlin Sans', sans-serif", fontWeight: 700 }}
                 >
                   {item.priceText || 'Cena'}
                 </span>
@@ -255,7 +255,7 @@ export const FiszkaCard: React.FC<FiszkaCardProps> = ({
             <div className="w-full flex items-center justify-end gap-1 text-right">
               <span
                 className="text-black font-bold select-none"
-                style={{ fontSize: '3.6mm', fontWeight: 700 }}
+                style={{ fontSize: '3.6mm', fontFamily: "'Leroy Merlin Sans', sans-serif", fontWeight: 700 }}
               >
                 Ref:
               </span>
@@ -267,14 +267,14 @@ export const FiszkaCard: React.FC<FiszkaCardProps> = ({
                   onFocus={() => handleFocus('refNumber', item.refNumber ?? '42660256')}
                   onBlur={() => handleBlur('refNumber', item.refNumber ?? '42660256')}
                   placeholder="42660256"
-                  className="w-[34mm] text-right text-black font-black font-mono tracking-tight bg-transparent border-b border-transparent hover:border-slate-400 focus:border-emerald-600 focus:bg-emerald-50/40 focus:outline-none px-1 py-0.5 rounded-xs"
-                  style={{ fontSize: '3.6mm', fontWeight: 900 }}
+                  className="w-[34mm] text-right text-black font-black tracking-tight bg-transparent border-b border-transparent hover:border-slate-400 focus:border-emerald-600 focus:bg-emerald-50/40 focus:outline-none px-1 py-0.5 rounded-xs"
+                  style={{ fontSize: '3.6mm', fontFamily: "'Leroy Merlin Sans', sans-serif", fontWeight: 900 }}
                   title="Kliknij, aby zmienić numer referencji (czyści się automatycznie)"
                 />
               ) : (
                 <span
-                  className="font-black font-mono text-black tracking-tight px-1"
-                  style={{ fontSize: '3.6mm', fontWeight: 900 }}
+                  className="font-black text-black tracking-tight px-1"
+                  style={{ fontSize: '3.6mm', fontFamily: "'Leroy Merlin Sans', sans-serif", fontWeight: 900 }}
                 >
                   {item.refNumber || '42660256'}
                 </span>

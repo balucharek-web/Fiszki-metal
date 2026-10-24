@@ -72,7 +72,7 @@ export const StandersLogo: React.FC<StandersLogoProps> = ({
         <span
           className="text-black font-extrabold tracking-wider leading-none mt-[2.2mm]"
           style={{
-            fontFamily: "'Plus Jakarta Sans', system-ui, sans-serif",
+            fontFamily: "'Leroy Merlin Sans', system-ui, sans-serif",
             fontSize: '3.6mm',
             letterSpacing: '0.08em',
           }}

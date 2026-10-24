@@ -14,16 +14,33 @@ export async function generateFillablePdf(
   const pdfDoc = await PDFDocument.create();
   pdfDoc.registerFontkit(fontkit);
 
-  // Load custom TTF font with Polish characters support
+  // Load custom TTF fonts (Leroy Merlin Sans) with Polish characters support
   let customFontBold: PDFFont | undefined;
+  let customFontRegular: PDFFont | undefined;
 
   if (fontBoldBytes) {
     customFontBold = await pdfDoc.embedFont(fontBoldBytes);
   } else if (typeof window !== 'undefined') {
     try {
-      const resBold = await fetch('./fonts/LiberationSans-Bold.ttf');
-      const bufBold = await resBold.arrayBuffer();
-      customFontBold = await pdfDoc.embedFont(new Uint8Array(bufBold));
+      const resBold = await fetch('./fonts/LeroyMerlinSans-Bold.ttf');
+      if (resBold.ok) {
+        const bufBold = await resBold.arrayBuffer();
+        customFontBold = await pdfDoc.embedFont(new Uint8Array(bufBold));
+      }
+    } catch {
+      // fallback
+    }
+  }
+
+  if (fontRegularBytes) {
+    customFontRegular = await pdfDoc.embedFont(fontRegularBytes);
+  } else if (typeof window !== 'undefined') {
+    try {
+      const resReg = await fetch('./fonts/LeroyMerlinSans-Regular.ttf');
+      if (resReg.ok) {
+        const bufReg = await resReg.arrayBuffer();
+        customFontRegular = await pdfDoc.embedFont(new Uint8Array(bufReg));
+      }
     } catch {
       // fallback
     }
@@ -65,8 +82,13 @@ export async function generateFillablePdf(
   fontDict.set(PDFName.of('Helvetica'), helvBold.ref);
   fontDict.set(PDFName.of('Helv'), helvBold.ref);
   if (customFontBold) {
-    fontDict.set(PDFName.of('LiberationSans-Bold'), customFontBold.ref);
+    fontDict.set(PDFName.of('LeroyMerlinSans-Bold'), customFontBold.ref);
+    fontDict.set(PDFName.of('LMSBold'), customFontBold.ref);
     fontDict.set(PDFName.of('CustomBold'), customFontBold.ref);
+  }
+  if (customFontRegular) {
+    fontDict.set(PDFName.of('LeroyMerlinSans-Regular'), customFontRegular.ref);
+    fontDict.set(PDFName.of('LMSRegular'), customFontRegular.ref);
   }
   dr.set(PDFName.of('Font'), fontDict);
   form.acroForm.dict.set(PDFName.of('DR'), dr);
@@ -165,7 +187,9 @@ export async function generateFillablePdf(
         font: boldFont,
       });
       nameField.setFontSize(14);
-      nameField.acroField.setDefaultAppearance('/Helvetica-Bold 14 Tf 0 0 0 rg');
+      nameField.acroField.setDefaultAppearance(
+        customFontBold ? '/LMSBold 14 Tf 0 0 0 rg' : '/Helvetica-Bold 14 Tf 0 0 0 rg'
+      );
       nameField.acroField.getWidgets()[0].dict.set(PDFName.of('DR'), dr);
       if (item.name) {
         try {
@@ -191,7 +215,9 @@ export async function generateFillablePdf(
         font: boldFont,
       });
       dimField.setFontSize(18);
-      dimField.acroField.setDefaultAppearance('/Helvetica-Bold 18 Tf 0 0 0 rg');
+      dimField.acroField.setDefaultAppearance(
+        customFontBold ? '/LMSBold 18 Tf 0 0 0 rg' : '/Helvetica-Bold 18 Tf 0 0 0 rg'
+      );
       dimField.acroField.getWidgets()[0].dict.set(PDFName.of('DR'), dr);
       if (item.dimension) {
         try {
@@ -228,7 +254,7 @@ export async function generateFillablePdf(
         color: rgb(0, 0, 0),
       });
 
-      // Numer na wadze - pogrubiony, duży (28pt)
+      // Numer na wadze - pogrubiony, duży (28pt) w czcionce Leroy Merlin Sans Bold
       const scaleField = form.createTextField(`fiszka_${globalIdx + 1}_waga`);
       if (item.scaleCode) {
         scaleField.setText(String(item.scaleCode));
@@ -240,10 +266,12 @@ export async function generateFillablePdf(
         width: 30 * MM_TO_PT,
         height: 11.2 * MM_TO_PT,
         borderWidth: 0,
-        font: helvBold,
+        font: boldFont,
       });
       scaleField.setFontSize(28);
-      scaleField.acroField.setDefaultAppearance('/Helvetica-Bold 28 Tf 0 0 0 rg');
+      scaleField.acroField.setDefaultAppearance(
+        customFontBold ? '/LMSBold 28 Tf 0 0 0 rg' : '/Helvetica-Bold 28 Tf 0 0 0 rg'
+      );
 
       const scaleWidget = scaleField.acroField.getWidgets()[0];
       scaleWidget.dict.set(PDFName.of('DR'), dr);
@@ -251,7 +279,7 @@ export async function generateFillablePdf(
 
       if (item.scaleCode) {
         try {
-          scaleField.updateAppearances(helvBold);
+          scaleField.updateAppearances(boldFont);
         } catch {
           // ignore
         }
@@ -289,7 +317,9 @@ export async function generateFillablePdf(
         font: boldFont,
       });
       priceField.setFontSize(11.5);
-      priceField.acroField.setDefaultAppearance('/Helvetica-Bold 11.5 Tf 0 0 0 rg');
+      priceField.acroField.setDefaultAppearance(
+        customFontBold ? '/LMSBold 11.5 Tf 0 0 0 rg' : '/Helvetica-Bold 11.5 Tf 0 0 0 rg'
+      );
       priceField.acroField.getWidgets()[0].dict.set(PDFName.of('DR'), dr);
       if (item.priceText) {
         try {
@@ -324,7 +354,9 @@ export async function generateFillablePdf(
         font: boldFont,
       });
       refField.setFontSize(11);
-      refField.acroField.setDefaultAppearance('/Helvetica-Bold 11 Tf 0 0 0 rg');
+      refField.acroField.setDefaultAppearance(
+        customFontBold ? '/LMSBold 11 Tf 0 0 0 rg' : '/Helvetica-Bold 11 Tf 0 0 0 rg'
+      );
       refField.acroField.getWidgets()[0].dict.set(PDFName.of('DR'), dr);
       if (item.refNumber) {
         try {
