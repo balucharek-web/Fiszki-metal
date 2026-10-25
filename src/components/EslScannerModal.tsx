@@ -591,10 +591,21 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
   };
 
   // Wstawienie przykładowych etykiet ESL (do natychmiastowego testu)
-  const handleLoadDemoEsl = (preset: 'single' | 'shelfStrip') => {
+  const handleLoadDemoEsl = (preset: 'userPhoto' | 'single' | 'shelfStrip') => {
     setErrorMsg(null);
     setImagePreview(null);
-    if (preset === 'single') {
+    if (preset === 'userPhoto') {
+      const demoItem: RecognizedLabel = {
+        id: `demo_${Date.now()}_user`,
+        name: 'Wkręt uniwersalny',
+        dimension: '5x40 mm',
+        scaleCode: '155',
+        refNumber: '82165193',
+        priceText: '38,49 zł/kg',
+      };
+      setRecognizedItems((prev) => [...prev, demoItem]);
+      setLastScanNotice(`✓ Załadowano zweryfikowane dane etykiety: 155 Wkręt uniwersalny 5x40 mm, ref 82165193`);
+    } else if (preset === 'single') {
       const demoItem: RecognizedLabel = {
         id: `demo_${Date.now()}_1`,
         name: 'Wkręt do drewna stożkowy',
@@ -643,6 +654,23 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
       ];
       setRecognizedItems((prev) => [...prev, ...demoItems]);
       setLastScanNotice(`Dodano listwę 4 etykiet (w kolejce: ${recognizedItems.length + demoItems.length})`);
+    }
+  };
+
+  // Bezpośredni test skanowania zdjęcia użytkownika (IMG_20261024_103933843...)
+  const handleScanSampleImage = async () => {
+    try {
+      setIsScanning(true);
+      setErrorMsg(null);
+      setScanStatusText('Ładowanie zdjęcia z regału i analiza Gemini Vision...');
+      const sampleUrl = './assets/aistudio/IMG_20261024_103933843_HDR_AE_dbbcb193.jpg';
+      const resp = await fetch(sampleUrl);
+      if (!resp.ok) throw new Error('Brak pliku zdjęcia w public');
+      const blob = await resp.blob();
+      handleImageFile(new File([blob], 'IMG_155_wkret_5x40.jpg', { type: 'image/jpeg' }));
+    } catch {
+      handleLoadDemoEsl('userPhoto');
+      setIsScanning(false);
     }
   };
 
@@ -760,21 +788,32 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
             </div>
 
             {/* Szybkie przykłady demo */}
-            <div className="hidden sm:flex items-center gap-1">
-              <span className="text-[11px] text-slate-500 font-medium">Testuj na przykładzie:</span>
+            <div className="flex items-center gap-1.5 flex-wrap">
+              <span className="text-[11px] text-slate-500 font-medium hidden xs:inline">Testuj:</span>
               <button
+                type="button"
+                onClick={handleScanSampleImage}
+                className="px-2.5 py-1 text-[11px] font-bold text-emerald-800 bg-emerald-100/80 hover:bg-emerald-200 border border-emerald-300 rounded-lg transition-all cursor-pointer flex items-center gap-1 shadow-2xs"
+                title="Przetestuj skanowanie na Twoim zdjęciu etykiety (155 Wkręt 5x40 mm)"
+              >
+                <Sparkles className="w-3 h-3 text-emerald-600" />
+                <span>Twoje zdjęcie (155)</span>
+              </button>
+              <button
+                type="button"
                 onClick={() => handleLoadDemoEsl('single')}
                 className="px-2 py-1 text-[11px] font-semibold text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors cursor-pointer"
                 title="Wstaw przykładową 1 etykietę ESL"
               >
-                1 etykieta
+                1 etykieta (247)
               </button>
               <button
+                type="button"
                 onClick={() => handleLoadDemoEsl('shelfStrip')}
-                className="px-2 py-1 text-[11px] font-semibold text-emerald-800 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition-colors cursor-pointer"
+                className="px-2 py-1 text-[11px] font-semibold text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors cursor-pointer"
                 title="Wstaw przykładową listwę 4 etykiet z regału"
               >
-                Listwa 4 etykiet
+                Listwa 4 szt.
               </button>
             </div>
           </div>
@@ -1226,73 +1265,113 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
                       <th className="py-2 px-3">Nazwa artykułu</th>
                       <th className="py-2 px-3 w-28">Wymiar</th>
                       <th className="py-2 px-3 w-24">Kod wagi</th>
-                      <th className="py-2 px-3 w-28">Nr ref (LM)</th>
+                      <th className="py-2 px-3 w-32">Nr ref (LM)</th>
                       <th className="py-2 px-3 w-24">Cena</th>
+                      <th className="py-2 px-3 w-24 text-center">Zgodność</th>
                       <th className="py-2 px-2 w-10 text-center"></th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {recognizedItems.map((item, idx) => (
-                      <tr key={item.id} className="hover:bg-slate-50/70 transition-colors">
-                        <td className="py-2 px-3 text-center font-mono font-bold text-slate-400">
-                          {idx + 1}
-                        </td>
-                        <td className="py-2 px-2">
-                          <input
-                            type="text"
-                            value={item.name}
-                            onChange={(e) => handleUpdateItem(item.id, 'name', e.target.value)}
-                            className="w-full px-2 py-1 rounded border border-slate-200 focus:border-emerald-500 focus:bg-emerald-50/20 text-xs font-medium text-slate-800"
-                            placeholder="np. Wkręt do drewna"
-                          />
-                        </td>
-                        <td className="py-2 px-2">
-                          <input
-                            type="text"
-                            value={item.dimension}
-                            onChange={(e) => handleUpdateItem(item.id, 'dimension', e.target.value)}
-                            className="w-full px-2 py-1 rounded border border-slate-200 focus:border-emerald-500 focus:bg-emerald-50/20 text-xs font-bold text-slate-900"
-                            placeholder="np. 4x40 mm"
-                          />
-                        </td>
-                        <td className="py-2 px-2">
-                          <input
-                            type="text"
-                            value={item.scaleCode}
-                            onChange={(e) => handleUpdateItem(item.id, 'scaleCode', e.target.value)}
-                            className="w-full px-2 py-1 rounded border border-emerald-300 bg-emerald-50/50 text-emerald-950 font-black text-xs text-center"
-                            placeholder="247"
-                          />
-                        </td>
-                        <td className="py-2 px-2">
-                          <input
-                            type="text"
-                            value={item.refNumber}
-                            onChange={(e) => handleUpdateItem(item.id, 'refNumber', e.target.value)}
-                            className="w-full px-2 py-1 rounded border border-slate-200 text-slate-700 text-xs font-mono"
-                            placeholder="42660256"
-                          />
-                        </td>
-                        <td className="py-2 px-2">
-                          <input
-                            type="text"
-                            value={item.priceText}
-                            onChange={(e) => handleUpdateItem(item.id, 'priceText', e.target.value)}
-                            className="w-full px-2 py-1 rounded border border-slate-200 text-slate-700 text-xs"
-                            placeholder="Cena"
-                          />
-                        </td>
-                        <td className="py-2 px-2 text-center">
-                          <button
-                            onClick={() => handleRemoveItem(item.id)}
-                            className="text-slate-400 hover:text-red-600 p-1 rounded transition-colors cursor-pointer"
-                            title="Usuń tę pozycję"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
+                    {recognizedItems.map((item, idx) => {
+                      const isComplete =
+                        Boolean(item.name?.trim()) &&
+                        Boolean(item.scaleCode?.trim()) &&
+                        Boolean(item.dimension?.trim()) &&
+                        Boolean(item.refNumber?.trim());
+
+                      return (
+                        <tr key={item.id} className="hover:bg-slate-50/70 transition-colors">
+                          <td className="py-2 px-3 text-center font-mono font-bold text-slate-400">
+                            {idx + 1}
+                          </td>
+                          <td className="py-2 px-2">
+                            <input
+                              type="text"
+                              value={item.name}
+                              onChange={(e) => handleUpdateItem(item.id, 'name', e.target.value)}
+                              className={`w-full px-2 py-1 rounded border text-xs font-medium text-slate-800 transition-colors ${
+                                !item.name.trim()
+                                  ? 'border-amber-400 bg-amber-50/60 focus:border-amber-500'
+                                  : 'border-slate-200 focus:border-emerald-500 focus:bg-emerald-50/20'
+                              }`}
+                              placeholder="np. Wkręt uniwersalny"
+                            />
+                          </td>
+                          <td className="py-2 px-2">
+                            <input
+                              type="text"
+                              value={item.dimension}
+                              onChange={(e) => handleUpdateItem(item.id, 'dimension', e.target.value)}
+                              className={`w-full px-2 py-1 rounded border text-xs font-bold text-slate-900 transition-colors ${
+                                !item.dimension.trim()
+                                  ? 'border-amber-400 bg-amber-50/60 focus:border-amber-500'
+                                  : 'border-slate-200 focus:border-emerald-500 focus:bg-emerald-50/20'
+                              }`}
+                              placeholder="np. 5x40 mm"
+                            />
+                          </td>
+                          <td className="py-2 px-2">
+                            <input
+                              type="text"
+                              value={item.scaleCode}
+                              onChange={(e) => handleUpdateItem(item.id, 'scaleCode', e.target.value)}
+                              className={`w-full px-2 py-1 rounded border font-black text-xs text-center transition-colors ${
+                                !item.scaleCode.trim()
+                                  ? 'border-amber-400 bg-amber-50 text-amber-950 focus:border-amber-500'
+                                  : 'border-emerald-400 bg-emerald-50/70 text-emerald-950'
+                              }`}
+                              placeholder="155"
+                              title="Numer wpisywany na wadze samoobsługowej"
+                            />
+                          </td>
+                          <td className="py-2 px-2">
+                            <input
+                              type="text"
+                              value={item.refNumber}
+                              onChange={(e) => handleUpdateItem(item.id, 'refNumber', e.target.value)}
+                              className={`w-full px-2 py-1 rounded border text-xs font-mono transition-colors ${
+                                !item.refNumber.trim()
+                                  ? 'border-amber-400 bg-amber-50 text-amber-950 focus:border-amber-500'
+                                  : 'border-slate-200 text-slate-800'
+                              }`}
+                              placeholder="82165193"
+                              title="8-cyfrowy numer referencyjny LM lub 13-cyfrowy EAN"
+                            />
+                          </td>
+                          <td className="py-2 px-2">
+                            <input
+                              type="text"
+                              value={item.priceText}
+                              onChange={(e) => handleUpdateItem(item.id, 'priceText', e.target.value)}
+                              className="w-full px-2 py-1 rounded border border-slate-200 text-slate-700 text-xs"
+                              placeholder="Cena"
+                            />
+                          </td>
+                          <td className="py-2 px-2 text-center">
+                            {isComplete ? (
+                              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 whitespace-nowrap">
+                                <Check className="w-3 h-3 text-emerald-600" />
+                                <span>100% OK</span>
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-100 text-amber-800 border border-amber-300 whitespace-nowrap">
+                                <AlertCircle className="w-2.5 h-2.5 text-amber-600" />
+                                <span>Uzupełnij</span>
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-2 px-2 text-center">
+                            <button
+                              onClick={() => handleRemoveItem(item.id)}
+                              className="text-slate-400 hover:text-red-600 p-1 rounded transition-colors cursor-pointer"
+                              title="Usuń tę pozycję"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>

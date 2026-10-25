@@ -54,39 +54,48 @@ app.post('/api/scan-esl', async (req, res) => {
       safeMime = 'image/jpeg';
     }
 
-    const promptText = `Jesteś wyspecjalizowanym systemem OCR do etykiet regałowych ESL (elektroniczne etykiety cenowe e-papier/LCD, np. Leroy Merlin / Standers) oraz etykiet papierowych z działu metalowego (śruby, wkręty, nakrętki, kołki).
+    const promptText = `Jesteś ultra-precyzyjnym systemem OCR dla elektronicznych etykiet cenowych e-papier ESL (Leroy Merlin, Standers, Castorama, OBI) oraz fiszek papierowych z działu metalowego (wkręty, śruby, nakrętki, podkładki, kołki).
+TWOIM ZADANIEM JEST BEZBŁĘDNE ODCZYTANIE WSZYSTKICH 4 KLUCZOWYCH PÓL Z ETYKIETY:
 
-BARDZO WAŻNE REGUŁY EKSTRAKCJI:
-1. PIONOWY KOD KRESKOWY PO PRAWEJ STRONIE (NA RAMCE/OBUDOWIE ETYKIETY ESL):
-   - BEZWZGLĘDNIE ZIGNORUJ pionowy kod kreskowy! To jest techniczny kod seryjny zawieszki ESL (np. 1474507509...). NIGDY nie używaj go jako numeru referencyjnego ani kodu wagi!
+DOKŁADNY UKŁAD GRAFICZNY ETYKIETY ESL E-PAPIER (od góry do dołu w lewej kolumnie):
+1. PIERWSZA LINIA (Kod wagi + Nazwa artykułu):
+   - Zawiera 2- lub 3-cyfrowy kod wagi, a po nim spację i nazwę towaru!
+   - PRZYKŁAD: "155 WKRĘT UNIWERSALNY" -> scaleCode: "155", name: "Wkręt uniwersalny"
+   - PRZYKŁAD: "247 WKRĘT DO DREWNA" -> scaleCode: "247", name: "Wkręt do drewna"
+   - PRZYKŁAD: "980 KOŁKI ROZPOROWE" -> scaleCode: "980", name: "Kołki rozporowe"
+   - scaleCode: ZAWSZE musi zawierać wyłącznie cyfry (np. "155").
+   - name: ZAWSZE sama nazwa artykułu bez numeru wagi z początku.
 
-2. NUMER REFERENCYJNY (refNumber):
-   - NAJWYŻSZY PRIORYTET: 8-cyfrowy numer referencyjny artykułu Leroy Merlin (np. "44813216", "99146892", "42660255", "42660256").
-   - Na elektronicznych wyświetlaczach ESL e-papier znajduje się on ZAWSZE w lewej kolumnie, POD rozmiarem (np. pod "6X90 MM" lub "4X12") i DOKŁADNIE NAD słowem "ZAPAS: X".
-   - Na fiszkach i etykietach papierowych znajduje się obok napisu "Ref:" (np. "Ref: 42660256").
-   - DRUGI PRIORYTET (gdyby 8-cyfrowy ref był niewidoczny): 13-cyfrowy kod EAN towaru z poziomego kodu kreskowego na dole wyświetlacza (usuń przyrostek tekstu np. "APS").
-   - Wartość refNumber musi zawierać wyłącznie czyste cyfry (8 lub 13 cyfr).
+2. DRUGA LINIA (Wymiar / Rozmiar produktu):
+   - Znajduje się bezpośrednio pod pierwszą linią (nazwą)!
+   - PRZYKŁAD: "5X40 MM" -> dimension: "5x40 mm"
+   - PRZYKŁAD: "6X90 MM" -> dimension: "6x90 mm"
+   - PRZYKŁAD: "4X12" -> dimension: "4x12 mm"
+   - PRZYKŁAD: "M6X50" -> dimension: "M6x50 mm"
+   - dimension: ZAWSZE z małym "x" i jednostką "mm" (np. "5x40 mm").
 
-3. KOD WAGI / NUMER NA WADZE (scaleCode):
-   - ZAWSZE go odczytaj! To liczba 2- lub 3-cyfrowa (np. "169", "246", "980", "170", "247").
-   - ZWYKLE znajduje się NA SAMYM POCZĄTKU pierwszej linijki tekstu przed nazwą (np. z "169 WKRĘT UNIWERSALNY" kod wagi to "169").
-   - Może być też w osobnym polu lub wyróżniony dużą czcionką.
+3. TRZECIA LINIA (8-cyfrowy numer referencyjny LM):
+   - Znajduje się bezpośrednio POD wymiarem i DOKŁADNIE NAD słowem "ZAPAS: X"!
+   - PRZYKŁAD: Na etykiecie jest "82165193", a linijkę niżej "ZAPAS: 9" -> refNumber to "82165193"!
+   - PRZYKŁAD: "44813216" nad "ZAPAS: 12" -> refNumber to "44813216".
+   - Na etykietach papierowych znajduje się obok "Ref: 42660256".
+   - JEŚLI 8-cyfrowy ref byłby zasłonięty, weź 13-cyfrowy kod EAN spod poziomego kodu na dole (np. "5901171215451").
+   - refNumber: Czysty ciąg cyfr (8 lub 13 cyfr).
 
-4. NAZWA ARTYKUŁU (name):
-   - Nazwa towaru bez kodu wagi z początku (np. z "169 WKRĘT UNIWERSALNY" wyodrębnij "Wkręt uniwersalny").
+4. CZWARTA LINIA: "ZAPAS: X" (stan magazynowy - zignoruj liczbę zapasu, służy tylko jako znacznik położenia refNumber).
 
-5. ROZMIAR / WYMIAR (dimension):
-   - Wymiar produktu (np. "6x90 mm", "5x70 mm", "4x12 mm", "4.5x50 mm", "M6x50"). Zawsze dodaj "mm".
+5. DOLNA LINIA: Poziomy kod kreskowy towaru z 13-cyfrowym kodem EAN (np. "5901171215451").
 
-6. CENA (priceText):
-   - Cena z jednostką (np. "38,49 zł/kg", "62,49 zł/kg" lub domyślnie "Cena").
+6. PRAWA STRONA: Duża cena (np. "38,49 zł/Kg" lub "34,90 zł/kg").
 
-7. WIELE POZYCJI:
-   - Skup się na głównej etykiecie na pierwszym planie. Jeśli w kadrze jest listwa z kilkoma ostrymi etykietami, zwróć je po kolei.`;
+7. BEZWZGLĘDNY ZAKAZ:
+   - ZIGNORUJ pionowy kod kreskowy na plastikowej ramce etykiety (zaczynający się od 147...)! To jest numer seryjny obudowy. NIGDY nie wpisuj go jako refNumber ani scaleCode.
+
+Zwróć bezbłędne, precyzyjne dane dla każdej widocznej etykiety na pierwszym planie.`;
 
     const modelConfig = {
       systemInstruction:
-        'Zwracaj wyłącznie tablicę JSON z odczytanymi danymi etykiet. Ignoruj pionowe kody seryjne ESL (zaczynające się od 147). Bezwzględnie odczytaj 8-cyfrowy numer referencyjny artykułu LM (znajdujący się nad słowem ZAPAS), kod wagi (np. 169, 980), wymiar oraz nazwę.',
+        'Jesteś bezbłędnym skanerem etykiet ESL Leroy Merlin. Dla każdej etykiety musisz precyzyjnie zwrócić: scaleCode (2-3 cyfry z początku pierwszej linii, np. 155), name (nazwa bez kodu wagi), dimension (wymiar z drugiej linii, np. 5x40 mm), refNumber (8 cyfr znajdujących się bezpośrednio nad słowem ZAPAS, np. 82165193) oraz priceText.',
       responseMimeType: 'application/json',
       responseSchema: {
         type: Type.ARRAY,
@@ -95,35 +104,35 @@ BARDZO WAŻNE REGUŁY EKSTRAKCJI:
           properties: {
             name: {
               type: Type.STRING,
-              description: 'Nazwa artykułu bez numeru wagi z początku',
+              description: 'Nazwa artykułu bez numeru wagi z początku (np. Wkręt uniwersalny)',
             },
             dimension: {
               type: Type.STRING,
-              description: 'Wymiar produktu z mm (np. 6x90 mm)',
+              description: 'Wymiar produktu z mm (np. 5x40 mm)',
             },
             scaleCode: {
               type: Type.STRING,
-              description: '2- lub 3-cyfrowy kod wagi wpisywany na wadze (np. 169)',
+              description: '2- lub 3-cyfrowy kod wagi wpisywany na wadze z początku 1. linii (np. 155)',
             },
             refNumber: {
               type: Type.STRING,
-              description: '8-cyfrowy numer referencyjny produktu LM lub kod EAN-13',
+              description: '8-cyfrowy numer referencyjny LM nad ZAPAS (np. 82165193) lub 13-cyfrowy EAN',
             },
             priceText: {
               type: Type.STRING,
               description: 'Cena z etykiety (np. 38,49 zł/kg)',
             },
           },
-          required: ['name', 'scaleCode'],
+          required: ['name', 'dimension', 'scaleCode', 'refNumber', 'priceText'],
         },
       },
     };
 
     let response;
     try {
-      // Primary: gemini-3.1-flash-lite
+      // Primary flagship multimodal vision: gemini-3.8-flash for maximum accuracy
       response = await ai.models.generateContent({
-        model: 'gemini-3.1-flash-lite',
+        model: 'gemini-3.8-flash',
         contents: {
           parts: [
             {
@@ -140,9 +149,9 @@ BARDZO WAŻNE REGUŁY EKSTRAKCJI:
         config: modelConfig,
       });
     } catch (err: any) {
-      console.warn('Fallback do gemini-3.8-flash:', err?.message);
+      console.warn('Fallback do gemini-3.1-flash-lite:', err?.message);
       response = await ai.models.generateContent({
-        model: 'gemini-3.8-flash',
+        model: 'gemini-3.1-flash-lite',
         contents: {
           parts: [
             {
@@ -165,12 +174,44 @@ BARDZO WAŻNE REGUŁY EKSTRAKCJI:
       jsonStr = jsonStr.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
     }
 
-    let items = [];
+    let rawItems: any[] = [];
     try {
-      items = JSON.parse(jsonStr);
+      rawItems = JSON.parse(jsonStr);
+      if (!Array.isArray(rawItems) && typeof rawItems === 'object' && rawItems !== null) {
+        rawItems = [rawItems];
+      }
     } catch {
-      items = [];
+      rawItems = [];
     }
+
+    // Sanitize and normalize items
+    const items = rawItems.map((it) => {
+      let scale = it.scaleCode ? String(it.scaleCode).replace(/\D/g, '') : '';
+      let rawName = (it.name || '').trim();
+      const leadingMatch = rawName.match(/^([0-9]{2,3})[\s\.\:\-]+(.*)/);
+      if (leadingMatch) {
+        if (!scale) scale = leadingMatch[1];
+        rawName = leadingMatch[2].trim();
+      }
+
+      let dim = (it.dimension || '').trim().replace('*', 'x').toLowerCase();
+      if (dim && !dim.endsWith('mm') && !dim.startsWith('m')) {
+        dim = `${dim} mm`;
+      }
+
+      let ref = it.refNumber ? String(it.refNumber).replace(/\D/g, '') : '';
+      if (ref.startsWith('147') && ref.length >= 12) {
+        ref = ''; // filter out ESL bezel serial
+      }
+
+      return {
+        name: rawName,
+        dimension: dim,
+        scaleCode: scale,
+        refNumber: ref,
+        priceText: it.priceText || 'Cena',
+      };
+    });
 
     return res.json({ success: true, items });
   } catch (error: any) {

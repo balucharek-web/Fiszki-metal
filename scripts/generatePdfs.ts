@@ -27,8 +27,8 @@ async function main() {
     fs.mkdirSync(publicDir, { recursive: true });
   }
 
-  const fontRegular = fs.readFileSync(path.join(publicDir, 'fonts', 'LeroyMerlinSans-Regular.ttf'));
-  const fontBold = fs.readFileSync(path.join(publicDir, 'fonts', 'LeroyMerlinSans-Bold.ttf'));
+  const fontRegular = fs.readFileSync(path.join(publicDir, 'fonts', 'LiberationSans-Regular.ttf'));
+  const fontBold = fs.readFileSync(path.join(publicDir, 'fonts', 'Roboto-Black.ttf'));
   const logoBytes = fs.readFileSync(path.join(publicDir, 'assets', 'standers_logo_transparent.png'));
 
   // 1. Generate 7-label PDF with sample values

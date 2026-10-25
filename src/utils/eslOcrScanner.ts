@@ -180,7 +180,7 @@ export function parseEslOcrText(rawText: string): OcrRecognizedLabel {
   // Pomocnik korygujący częste zamiany cienkich cyfr w kodzie wagi (np. ISS -> 155, l69 -> 169, 98O -> 980)
   const normalizeScaleCode = (raw: string): string => {
     if (!raw) return '';
-    const fixed = raw
+    let fixed = raw
       .trim()
       .toUpperCase()
       .replace(/O/g, '0')
@@ -188,7 +188,13 @@ export function parseEslOcrText(rawText: string): OcrRecognizedLabel {
       .replace(/S/g, '5')
       .replace(/B/g, '8')
       .replace(/Z/g, '2')
-      .replace(/G|Q/g, '9');
+      .replace(/G|Q/g, '9')
+      .replace(/[^0-9]/g, '');
+
+    // Jeśli OCR dołączył pionową kreskę/ramkę z lewej (np. 4155, 1155, 7155)
+    if (fixed.length === 4 && /^[147|]/.test(fixed)) {
+      fixed = fixed.slice(1);
+    }
 
     if (/^[1-9][0-9]{1,2}$/.test(fixed)) {
       if (fixed === '380' || fixed === '30' || fixed === '0') return '980';
@@ -197,34 +203,39 @@ export function parseEslOcrText(rawText: string): OcrRecognizedLabel {
     return '';
   };
 
-  // 4. Poszukiwanie linii z numerem na wadze i nazwą: "169 WKRET UNIWERSALNY" lub "ISS WKRET..." lub "980 KOLKI..."
-  for (const line of lines) {
-    const scaleMatch = line.match(/(?:^|[\s\.\:\-\>]+)([0-9A-Za-z|!]{2,3})\s+([A-ZĄĆĘŁŃÓŚŹŻa-ząćęłńóśźż0-9\-\s\.\/]{3,})/i);
-    if (scaleMatch && scaleMatch[1] && scaleMatch[2]) {
-      const candidate = normalizeScaleCode(scaleMatch[1]);
-      if (candidate) {
-        scaleCode = candidate;
-        name = scaleMatch[2].trim();
-        break;
+  // 4. Poszukiwanie kodu wagi i nazwy:
+  // Priorytet A: Szukanie kodu wagi bezpośrednio przed słowem kluczowym (np. "4155 WKRĘT", "155 WKRĘT UNIWERSALNY")
+  const directKwRegex = /(?:^|[^0-9A-Za-z])([0-9A-Za-z|!]{2,4})\s+((?:WKRĘT|WKRET|ŚRUBA|SRUBA|KOŁKI|KOŁEK|KOLKI|KOLEK|NAKRĘTKA|NAKRETKA|PODKŁADKA|PODKLADKA|KOTWA)[\s\wĄĆĘŁŃÓŚŹŻąćęłńóśźż]*)/i;
+  const directKwMatch = rawText.match(directKwRegex);
+  if (directKwMatch && directKwMatch[1] && directKwMatch[2]) {
+    const cand = normalizeScaleCode(directKwMatch[1]);
+    if (cand) {
+      scaleCode = cand;
+      name = directKwMatch[2].trim();
+    }
+  }
+
+  // Priorytet B: Poszukiwanie linii z kodem na początku: "169 WKRET..." lub "ISS WKRET..."
+  if (!scaleCode) {
+    for (const line of lines) {
+      const scaleMatch = line.match(/(?:^|[\s\.\:\-\>]+)([0-9A-Za-z|!]{2,4})\s+([A-ZĄĆĘŁŃÓŚŹŻa-ząćęłńóśźż0-9\-\s\.\/]{3,})/i);
+      if (scaleMatch && scaleMatch[1] && scaleMatch[2]) {
+        const candidate = normalizeScaleCode(scaleMatch[1]);
+        if (candidate) {
+          scaleCode = candidate;
+          if (!name) name = scaleMatch[2].trim();
+          break;
+        }
       }
     }
   }
 
-  // Jeśli nazwa nie została znaleziona na początku z kodem, szukamy po słowach kluczowych
+  // Priorytet C: Jeśli nazwa nadal nieznana, szukaj słów kluczowych
   if (!name) {
     for (const line of lines) {
       for (const kw of fastenerKeywords) {
         if (line.toUpperCase().includes(kw)) {
-          // Szukamy kodu wagi na tej samej linii
-          const tokens = line.split(/\s+/);
-          for (const tok of tokens) {
-            const cand = normalizeScaleCode(tok);
-            if (cand && !scaleCode) {
-              scaleCode = cand;
-              break;
-            }
-          }
-          name = line.replace(/^[0-9\sA-Za-z|!]{1,4}\s+/, '').trim();
+          name = line.replace(/^[0-9\sA-Za-z|!]{1,5}\s+/, '').trim();
           break;
         }
       }
@@ -232,43 +243,42 @@ export function parseEslOcrText(rawText: string): OcrRecognizedLabel {
     }
   }
 
-  // Jeśli numer na wadze nadal pusty, sprawdź kandydatów w tekście
+  // 5. Rozmiar / wymiar (np. 5X40 MM, 6X90 MM, 4X12, 5X24, 4x40 mm, M6x30, 4,5x50)
+  // Wykrywa także sytuację, gdy wymiar jest sklejony z nazwą (np. "UNIWERSALNY5X40 MM")
+  const dimGlobalRegex = /(?:^|[^0-9A-Za-z]|(?<=[A-Za-z]))([1-9][0-9]?(?:[\.,][0-9]+)?\s*[xX*]\s*[0-9]+(?:[\.,][0-9]+)?(?:\s*mm)?)(?:$|[^0-9A-Za-z])/i;
+  const dimMatch = rawText.match(dimGlobalRegex);
+  if (dimMatch && dimMatch[1]) {
+    const rawDimStr = dimMatch[1];
+    const cleanDim = rawDimStr.replace(/\s+/g, '').replace('*', 'x').toLowerCase();
+    dimension = cleanDim.replace(/mm$/i, '').trim() + ' mm';
+
+    // Jeśli wymiar był sklejony z nazwą, usuń go z nazwy
+    if (name) {
+      name = name.replace(new RegExp(`\\s*${rawDimStr.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}.*`, 'i'), '').trim();
+      name = name.replace(new RegExp(`\\s*${cleanDim.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}.*`, 'i'), '').trim();
+    }
+  }
+
+  // Jeśli kod wagi nadal nieodnaleziony, szukaj tokenów z dala od ceny i zapasu
   if (!scaleCode) {
-    const rawTokens = rawText.split(/\s+/);
-    for (const tok of rawTokens) {
-      const cleanTok = tok.replace(/[^0-9A-Za-z|!]/g, '');
-      if (cleanTok.length >= 2 && cleanTok.length <= 3) {
-        const cand = normalizeScaleCode(cleanTok);
-        if (cand && !refNumber.includes(cand) && !eanCode.includes(cand)) {
-          scaleCode = cand;
-          break;
+    const safeLines = lines.filter(l => !/zł|zl|wgra|zapas|kg|gr/i.test(l));
+    for (const l of safeLines) {
+      const tokens = l.split(/\s+/);
+      for (const tok of tokens) {
+        const cleanTok = tok.replace(/[^0-9A-Za-z|!]/g, '');
+        if (cleanTok.length >= 2 && cleanTok.length <= 4) {
+          const cand = normalizeScaleCode(cleanTok);
+          if (cand && !refNumber.includes(cand) && !eanCode.includes(cand)) {
+            scaleCode = cand;
+            break;
+          }
         }
       }
-    }
-  }
-
-  // 5. Rozmiar / wymiar (np. 5X40 MM, 6X90 MM, 4X12, 5X24, 4x40 mm, M6x30, 4,5x50)
-  for (const line of lines) {
-    if (line.includes('zł') || line.includes('zl')) continue;
-    const dimMatch = line.match(/(?:^|[\s\.\:\-\|]+)([1-9][0-9]?(?:[\.,][0-9]+)?\s*[xX*]\s*[0-9]+(?:[\.,][0-9]+)?(?:\s*mm)?)(?:$|[\s\.\:\-\|]+)/i);
-    if (dimMatch && dimMatch[1]) {
-      const cleanDim = dimMatch[1].replace(/\s+/g, '').replace('*', 'x').toLowerCase();
-      dimension = cleanDim.replace(/mm$/i, '').trim() + ' mm';
-      break;
-    }
-  }
-
-  // Dodatkowy fallback na wymiar typu "6X90", "4X12", "5X24", "5x40 mm"
-  if (!dimension) {
-    const fallbackDim = rawText.match(/\b([1-9][0-9]?(?:[\.,][0-9]+)?\s*[xX*]\s*[0-9]+(?:[\.,][0-9]+)?(?:\s*mm)?)\b/i);
-    if (fallbackDim && fallbackDim[1]) {
-      const cleanDim = fallbackDim[1].toLowerCase().replace(/\s+/g, '').replace('*', 'x');
-      dimension = cleanDim.replace(/mm$/i, '').trim() + ' mm';
+      if (scaleCode) break;
     }
   }
 
   // 6. Cena (np. 38,49 zł/kg, 62,49 zł/kg)
-  // Ignorujemy linie z ZAPAS (stan magazynowy nie może być brany za cenę)
   const nonZapasLines = lines.filter((l) => !/ZAPAS/i.test(l));
   let foundPrice = '';
 
@@ -296,10 +306,14 @@ export function parseEslOcrText(rawText: string): OcrRecognizedLabel {
 
   // Normalizacja nazwy
   if (name) {
+    // Usunięcie ewentualnych śmieci po wymiarze lub kodach
+    name = name.replace(/[:;\|].*$/, '').trim();
     if (/KOLK.*MOLLY/i.test(name)) {
       name = 'Kołki do G-K Molly';
     } else if (/(WKRET|WKRĘT).*UNIWERSALNY/i.test(name)) {
       name = 'Wkręt uniwersalny';
+    } else if (/(WKRET|WKRĘT).*DREWN/i.test(name)) {
+      name = 'Wkręt do drewna';
     } else {
       name = name
         .split(' ')
