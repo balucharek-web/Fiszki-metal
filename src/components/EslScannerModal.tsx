@@ -71,6 +71,135 @@ interface RecognizedLabel {
   priceText: string;
 }
 
+// Słownik automatycznej korekty najczęstszych literówek OCR z działu metalowego
+const METAL_DICTIONARY_CORRECTIONS: [RegExp, string][] = [
+  [/\bwkr[eęc][t|t]\b/gi, 'Wkręt'],
+  [/\bwkret\b/gi, 'Wkręt'],
+  [/\bdrew[nu]a\b/gi, 'drewna'],
+  [/\buniwersal[nu]y\b/gi, 'uniwersalny'],
+  [/\bplyt\s+g-?k\b/gi, 'płyt g-k'],
+  [/\bgipsowo[-\s]kartonowych\b/gi, 'gipsowo-kartonowych'],
+  [/\bsrub[ay]\b/gi, 'Śruba'],
+  [/\bzamkow[ay]\b/gi, 'zamkowa'],
+  [/\bszesciokatn[ay]\b/gi, 'sześciokątna'],
+  [/\bnakretk[ay]\b/gi, 'Nakrętka'],
+  [/\bsamohamown[ay]\b/gi, 'samohamowna'],
+  [/\bpodkladk[ay]\b/gi, 'Podkładka'],
+  [/\bposzerzan[ay]\b/gi, 'poszerzana'],
+  [/\bsprezyst[ay]\b/gi, 'sprężysta'],
+  [/\bkole?k(i)?\s+rozporow[ey]\b/gi, 'Kołki rozporowe'],
+  [/\bkotw[ay]\s+stalow[ay]\b/gi, 'Kotwa stalowa'],
+  [/\bsamowiercac[ey]\b/gi, 'samowiercący'],
+  [/\btarasow[ey]\b/gi, 'tarasowy'],
+  [/\bdo\s+blach[yi]\b/gi, 'do blachy'],
+];
+
+function correctMetalArticleName(name: string): string {
+  if (!name) return '';
+  let cleaned = name.trim();
+  for (const [pattern, replacement] of METAL_DICTIONARY_CORRECTIONS) {
+    cleaned = cleaned.replace(pattern, replacement);
+  }
+  if (cleaned.length > 0) {
+    cleaned = cleaned.charAt(0).toUpperCase() + cleaned.slice(1);
+  }
+  return cleaned;
+}
+
+function normalizeDimension(dim: string): string {
+  if (!dim) return '';
+  let cleaned = dim.trim();
+  cleaned = cleaned.replace(/\s*[xX*×]\s*/g, 'x');
+  cleaned = cleaned.replace(/\s*mm\s*$/i, '');
+  cleaned = cleaned.replace(/^(fi|ø|Ø)\s*/i, '');
+  return `${cleaned} mm`;
+}
+
+// Cyfrowy filtr kontrastu e-papieru: rozciąganie histogramu luminancji
+function enhanceEslImageContrast(ctx: CanvasRenderingContext2D, width: number, height: number): void {
+  try {
+    const imgData = ctx.getImageData(0, 0, width, height);
+    const data = imgData.data;
+    const len = data.length;
+
+    const hist = new Int32Array(256);
+    const totalPixels = width * height;
+
+    for (let i = 0; i < len; i += 4) {
+      const luma = (data[i] * 0.299 + data[i + 1] * 0.587 + data[i + 2] * 0.114) | 0;
+      hist[luma]++;
+    }
+
+    const lowCutoff = Math.floor(totalPixels * 0.02);
+    const highCutoff = Math.floor(totalPixels * 0.98);
+
+    let minLum = 0;
+    let acc = 0;
+    for (let i = 0; i < 256; i++) {
+      acc += hist[i];
+      if (acc >= lowCutoff) {
+        minLum = i;
+        break;
+      }
+    }
+
+    acc = 0;
+    let maxLum = 255;
+    for (let i = 255; i >= 0; i--) {
+      acc += hist[i];
+      if (acc >= totalPixels - highCutoff) {
+        maxLum = i;
+        break;
+      }
+    }
+
+    if (maxLum > minLum + 25) {
+      const range = maxLum - minLum;
+      const lut = new Uint8Array(256);
+      for (let i = 0; i < 256; i++) {
+        const stretched = ((i - minLum) * 255) / range;
+        lut[i] = Math.max(0, Math.min(255, Math.round(stretched)));
+      }
+
+      for (let i = 0; i < len; i += 4) {
+        data[i] = lut[data[i]];
+        data[i + 1] = lut[data[i + 1]];
+        data[i + 2] = lut[data[i + 2]];
+      }
+      ctx.putImageData(imgData, 0, 0);
+    }
+  } catch {
+    // Bezpieczny fallback gdy canvas nie pozwala na getImageData
+  }
+}
+
+// Dźwięk potwierdzenia sukcesu i haptyczna wibracja w telefonie
+function triggerScanSuccessFeedback(): void {
+  try {
+    if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+      navigator.vibrate([35, 45, 35]);
+    }
+    const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+    if (AudioContextClass) {
+      const audioCtx = new AudioContextClass();
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+      const osc = audioCtx.createOscillator();
+      const gainNode = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(880, audioCtx.currentTime);
+      osc.frequency.exponentialRampToValueAtTime(1320, audioCtx.currentTime + 0.09);
+      gainNode.gain.setValueAtTime(0.12, audioCtx.currentTime);
+      gainNode.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.14);
+      osc.connect(gainNode);
+      gainNode.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.15);
+    }
+  } catch {}
+}
+
 export const EslScannerModal: React.FC<EslScannerModalProps> = ({
   isOpen,
   onClose,
@@ -190,22 +319,20 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
     return () => window.removeEventListener('paste', handlePaste);
   }, [isOpen]);
 
-  // Helper to downscale large camera photos to max 1920px before sending to server
+  // Helper do skalowania i cyfrowego podbicia kontrastu e-papieru przed analizą AI / OCR
   const compressImageForApi = (dataUrl: string, maxDimension = 1920): Promise<string> => {
     return new Promise((resolve) => {
       const img = new Image();
       img.onload = () => {
         let { width, height } = img;
-        if (width <= maxDimension && height <= maxDimension) {
-          resolve(dataUrl);
-          return;
-        }
-        if (width > height) {
-          height = Math.round((height * maxDimension) / width);
-          width = maxDimension;
-        } else {
-          width = Math.round((width * maxDimension) / height);
-          height = maxDimension;
+        if (width > maxDimension || height > maxDimension) {
+          if (width > height) {
+            height = Math.round((height * maxDimension) / width);
+            width = maxDimension;
+          } else {
+            width = Math.round((width * maxDimension) / height);
+            height = maxDimension;
+          }
         }
         const canvas = document.createElement('canvas');
         canvas.width = width;
@@ -216,7 +343,9 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
           return;
         }
         ctx.drawImage(img, 0, 0, width, height);
-        resolve(canvas.toDataURL('image/jpeg', 0.88));
+        // Cyfrowe rozciągnięcie kontrastu i wyostrzenie e-papieru
+        enhanceEslImageContrast(ctx, width, height);
+        resolve(canvas.toDataURL('image/jpeg', 0.90));
       };
       img.onerror = () => resolve(dataUrl);
       img.src = dataUrl;
@@ -539,12 +668,10 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
               name = leadingScale[2].trim();
             }
             if (!name) name = clientBarcode ? 'Artykuł z kodu kreskowego' : '';
+            name = correctMetalArticleName(name);
 
             // 3. Wymiar: normalizacja z mm
-            let dim = (it.dimension || '').trim();
-            if (dim && !dim.toLowerCase().endsWith('mm') && !dim.toLowerCase().startsWith('m')) {
-              dim = `${dim} mm`;
-            }
+            const dim = normalizeDimension(it.dimension || '');
 
             return {
               id: `scanned_${Date.now()}_${idx}`,
@@ -606,12 +733,9 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
         finalName = leadingMatch[2].trim();
       }
       if (!finalName) finalName = clientBarcode ? 'Artykuł z kodu kreskowego' : '';
+      finalName = correctMetalArticleName(finalName);
 
-      let finalDimension = (ocrResult?.dimension || '').trim();
-      if (finalDimension && !finalDimension.toLowerCase().endsWith('mm') && !finalDimension.toLowerCase().startsWith('m')) {
-        finalDimension = `${finalDimension} mm`;
-      }
-
+      const finalDimension = normalizeDimension(ocrResult?.dimension || '');
       const finalPrice = ocrResult?.priceText || '';
 
       const recognizedItem: RecognizedLabel = {
@@ -636,6 +760,9 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
   // Centralne dodawanie pozycji: ZAWSZE na stałe natychmiastowe wgrywanie z auto-podglądem
   const handleItemsAcquired = (newItems: RecognizedLabel[]) => {
     if (newItems.length === 0) return;
+
+    // Dźwięk potwierdzenia sukcesu i haptyczna wibracja w telefonie
+    triggerScanSuccessFeedback();
 
     const finalItems: FiszkaItem[] = newItems.map((r) => ({
       id: r.id,
@@ -854,77 +981,103 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
                   className={`w-full h-full object-cover ${isCameraActive ? 'block' : 'hidden'}`}
                 />
 
-                {/* Siatka pomocnicza celownika etykiety ESL ze wskaźnikiem stabilizacji */}
+                {/* Profesjonalny celownik optyczny etykiety ESL ze wskaźnikiem stabilizacji */}
                 {isCameraActive && (
                   <div
-                    className={`absolute inset-4 sm:inset-6 border-2 rounded-xl pointer-events-none flex flex-col justify-between p-3 transition-all duration-200 ${
+                    className={`absolute inset-3 sm:inset-5 border-2 rounded-2xl pointer-events-none flex flex-col justify-between p-3 transition-all duration-200 overflow-hidden ${
                       isCameraSteady
-                        ? 'border-emerald-400 bg-emerald-500/5 shadow-[0_0_20px_rgba(52,211,153,0.35)]'
-                        : 'border-amber-400/80 border-dashed bg-amber-500/5'
+                        ? 'border-emerald-400 bg-emerald-500/5 shadow-[0_0_24px_rgba(52,211,153,0.35)]'
+                        : 'border-amber-400/90 border-dashed bg-amber-500/5'
                     }`}
                   >
-                    <div className="flex justify-between items-center text-[11px] gap-2">
-                      <div className="text-emerald-300 bg-black/70 backdrop-blur-xs px-2.5 py-1 rounded-md flex items-center gap-1.5 font-medium">
-                        <span>Etykieta ESL</span>
-                        <span className="text-[10px] text-slate-400 hidden xs:inline">19.5 x 4 cm</span>
-                      </div>
+                    {/* Narożniki optyczne celownika (Corner Brackets) */}
+                    <div className="absolute top-2 left-2 w-4 sm:w-5 h-4 sm:h-5 border-t-2 sm:border-t-3 border-l-2 sm:border-l-3 border-emerald-400 rounded-tl pointer-events-none shadow-xs" />
+                    <div className="absolute top-2 right-2 w-4 sm:w-5 h-4 sm:h-5 border-t-2 sm:border-t-3 border-r-2 sm:border-r-3 border-emerald-400 rounded-tr pointer-events-none shadow-xs" />
+                    <div className="absolute bottom-2 left-2 w-4 sm:w-5 h-4 sm:h-5 border-b-2 sm:border-b-3 border-l-2 sm:border-l-3 border-emerald-400 rounded-bl pointer-events-none shadow-xs" />
+                    <div className="absolute bottom-2 right-2 w-4 sm:w-5 h-4 sm:h-5 border-b-2 sm:border-b-3 border-r-2 sm:border-r-3 border-emerald-400 rounded-br pointer-events-none shadow-xs" />
 
-                      {/* Wskaźnik stabilności i braku drgań ręki na żywo */}
-                      <div
-                        className={`px-2.5 py-1 rounded-md text-[11px] font-bold flex items-center gap-1.5 shadow-md transition-all ${
-                          isCameraSteady
-                            ? 'bg-emerald-600/90 text-white'
-                            : 'bg-amber-600/90 text-white animate-pulse'
-                        }`}
-                      >
-                        {isCameraSteady ? (
-                          <>
-                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-200" />
-                            <span>Kadr stabilny (ostry)</span>
-                          </>
-                        ) : (
-                          <>
-                            <Activity className="w-3.5 h-3.5 text-amber-200" />
-                            <span>Trzymaj nieruchomo (redukcja drgań)</span>
-                          </>
-                        )}
+                    {/* Górna strefa naprowadzania: KOD WAGI I NAZWA TOWARU */}
+                    <div className="flex flex-col gap-1.5 z-10">
+                      <div className="flex justify-between items-center text-[11px] gap-2">
+                        <div className="text-emerald-300 bg-slate-950/85 border border-emerald-500/40 backdrop-blur-xs px-2.5 py-0.5 rounded-md flex items-center gap-1.5 font-bold shadow-xs">
+                          <span>▲ KOD WAGI I NAZWA TOWARU</span>
+                        </div>
+
+                        {/* Wskaźnik stabilności i ostrości */}
+                        <div
+                          className={`px-2.5 py-0.5 rounded-md text-[11px] font-bold flex items-center gap-1.5 shadow-md transition-all ${
+                            isCameraSteady
+                              ? 'bg-emerald-600 text-white'
+                              : 'bg-amber-600 text-white animate-pulse'
+                          }`}
+                        >
+                          {isCameraSteady ? (
+                            <>
+                              <CheckCircle2 className="w-3.5 h-3.5 text-emerald-200" />
+                              <span>Kadr ostry i stabilny</span>
+                            </>
+                          ) : (
+                            <>
+                              <Activity className="w-3.5 h-3.5 text-amber-200" />
+                              <span>Trzymaj nieruchomo</span>
+                            </>
+                          )}
+                        </div>
                       </div>
                     </div>
 
-                    {/* Wskaźnik słabego oświetlenia z możliwością szybkiego kliknięcia */}
-                    {isLowLightDetected && !isTorchOn && (
-                      <div className="flex justify-center -my-1">
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            toggleTorch();
-                          }}
-                          className="pointer-events-auto bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-3 py-1 rounded-full text-[11px] shadow-lg flex items-center gap-1.5 transition-all cursor-pointer animate-pulse"
-                          title="Kliknij, aby włączyć doświetlenie latarką"
-                        >
-                          <Lightbulb className="w-3.5 h-3.5" />
-                          <span>Słabe światło – włącz latarkę 💡</span>
-                        </button>
-                      </div>
-                    )}
+                    {/* Środek: animowany laserowy promień celownika */}
+                    <div className="relative w-full flex items-center justify-center my-auto pointer-events-none">
+                      <div className="w-full h-0.5 bg-gradient-to-r from-transparent via-emerald-400/90 to-transparent shadow-[0_0_10px_#34d399] animate-pulse" />
+                    </div>
 
-                    <div className="flex justify-center items-center">
-                      {isCapturingBurst ? (
-                        <div className="text-center text-xs text-white bg-emerald-600/95 font-bold px-3.5 py-1.5 rounded-lg shadow-xl flex items-center gap-2">
-                          <RefreshCw className="w-4 h-4 animate-spin" />
-                          <span>Anti-Shake: dobieranie najostrzejszej klatki z serii...</span>
-                        </div>
-                      ) : autoCaptureOnSteady ? (
-                        <div className="text-center text-[10px] text-emerald-200 bg-black/75 backdrop-blur-xs py-1 px-3 rounded-md flex items-center gap-1.5 border border-emerald-500/40">
-                          <Zap className="w-3 h-3 text-emerald-400 animate-bounce" />
-                          <span>Auto-strzał: przytrzymaj nieruchomo przez ułamek sekundy</span>
-                        </div>
-                      ) : (
-                        <div className="text-center text-[10px] text-slate-300 bg-black/65 backdrop-blur-xs py-1 px-3 rounded-md">
-                          Stabilizator Anti-Shake automatycznie eliminuje rozmycie drżenia ręki
+                    {/* Dolna strefa naprowadzania: REF (8 CYFR) I KOD KRESKOWY */}
+                    <div className="flex flex-col gap-2 z-10">
+                      {isLowLightDetected && !isTorchOn && (
+                        <div className="flex justify-center -my-1">
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              toggleTorch();
+                            }}
+                            className="pointer-events-auto bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold px-3 py-1 rounded-full text-[11px] shadow-lg flex items-center gap-1.5 transition-all cursor-pointer animate-pulse"
+                            title="Kliknij, aby włączyć doświetlenie latarką"
+                          >
+                            <Lightbulb className="w-3.5 h-3.5" />
+                            <span>Słabe światło – włącz latarkę 💡</span>
+                          </button>
                         </div>
                       )}
+
+                      <div className="flex justify-between items-center text-[10px]">
+                        <div className="text-slate-200 bg-slate-950/85 border border-slate-700/80 backdrop-blur-xs px-2.5 py-0.5 rounded-md flex items-center gap-1 font-mono">
+                          <span>▼ REF (8 CYFR) I KOD KRESKOWY</span>
+                        </div>
+
+                        <div className="text-emerald-300 bg-slate-950/80 backdrop-blur-xs py-0.5 px-2 rounded-md hidden xs:flex items-center gap-1 border border-emerald-500/20">
+                          <Sparkles className="w-3 h-3 text-emerald-400" />
+                          <span>Auto-kontrast e-papieru</span>
+                        </div>
+                      </div>
+
+                      <div className="flex justify-center items-center">
+                        {isCapturingBurst ? (
+                          <div className="text-center text-xs text-white bg-emerald-600/95 font-bold px-3.5 py-1.5 rounded-lg shadow-xl flex items-center gap-2">
+                            <RefreshCw className="w-4 h-4 animate-spin" />
+                            <span>Anti-Shake: dobieranie najostrzejszej klatki...</span>
+                          </div>
+                        ) : autoCaptureOnSteady ? (
+                          <div className="text-center text-[10px] text-emerald-200 bg-black/75 backdrop-blur-xs py-1 px-3 rounded-md flex items-center gap-1.5 border border-emerald-500/40">
+                            <Zap className="w-3 h-3 text-emerald-400 animate-bounce" />
+                            <span>Auto-strzał: przytrzymaj nieruchomo przez ułamek sekundy</span>
+                          </div>
+                        ) : (
+                          <div className="text-center text-[10px] text-slate-300 bg-black/65 backdrop-blur-xs py-1 px-3 rounded-md">
+                            Dopasuj etykietę do ramki celownika i naciśnij migawkę
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
                 )}

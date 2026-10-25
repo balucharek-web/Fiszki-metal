@@ -54,39 +54,44 @@ app.post('/api/scan-esl', async (req, res) => {
       safeMime = 'image/jpeg';
     }
 
-    const promptText = `Jesteś ultra-precyzyjnym systemem OCR dla elektronicznych etykiet cenowych e-papier ESL (Leroy Merlin, Standers, Castorama, OBI) oraz fiszek papierowych z działu metalowego (wkręty, śruby, nakrętki, podkładki, kołki).
-TWOIM ZADANIEM JEST BEZBŁĘDNE ODCZYTANIE WSZYSTKICH 4 KLUCZOWYCH PÓL Z ETYKIETY:
+    const promptText = `Jesteś wyspecjalizowanym, ultra-precyzyjnym systemem OCR dla elektronicznych etykiet cenowych e-papier ESL (Leroy Merlin, Standers, Castorama, OBI) oraz fiszek papierowych z działu metalowego (wkręty, śruby, nakrętki, podkładki, kołki, kotwy).
+TWOIM ZADANIEM JEST BEZBŁĘDNE ODCZYTANIE I STANDARYZACJA WSZYSTKICH 4 KLUCZOWYCH PÓL:
 
-DOKŁADNY UKŁAD GRAFICZNY ETYKIETY ESL E-PAPIER (od góry do dołu w lewej kolumnie):
+DOKŁADNY UKŁAD GRAFICZNY ETYKIETY ESL E-PAPIER (lewa kolumna od góry do dołu):
 1. PIERWSZA LINIA (Kod wagi + Nazwa artykułu):
-   - Zawiera 2- lub 3-cyfrowy kod wagi, a po nim spację i nazwę towaru!
+   - Rozpoczyna się od 2- lub 3-cyfrowego kodu wagi, po którym występuje spacja, kropka lub myślnik i nazwa towaru!
    - PRZYKŁAD: "155 WKRĘT UNIWERSALNY" -> scaleCode: "155", name: "Wkręt uniwersalny"
-   - PRZYKŁAD: "247 WKRĘT DO DREWNA" -> scaleCode: "247", name: "Wkręt do drewna"
-   - PRZYKŁAD: "980 KOŁKI ROZPOROWE" -> scaleCode: "980", name: "Kołki rozporowe"
-   - scaleCode: ZAWSZE musi zawierać wyłącznie cyfry (np. "155").
-   - name: ZAWSZE sama nazwa artykułu bez numeru wagi z początku.
+   - PRZYKŁAD: "247. WKRĘT DO DREWNA" -> scaleCode: "247", name: "Wkręt do drewna"
+   - PRZYKŁAD: "980 - KOŁKI ROZPOROWE" -> scaleCode: "980", name: "Kołki rozporowe"
+   - PRZYKŁAD: "42 ŚRUBA ZAMKOWA" -> scaleCode: "42", name: "Śruba zamkowa"
+   - scaleCode: ZAWSZE musi zawierać wyłącznie cyfry (np. "155", "247", "42"). Nigdy nie dołączaj kropek, liter ani myślników.
+   - name: ZAWSZE sama nazwa artykułu bez numeru wagi. Sformatuj poprawną polską pisownią wielką literą na początku (np. "Wkręt do drewna", "Podkładka poszerzana").
 
 2. DRUGA LINIA (Wymiar / Rozmiar produktu):
    - Znajduje się bezpośrednio pod pierwszą linią (nazwą)!
-   - PRZYKŁAD: "5X40 MM" -> dimension: "5x40 mm"
-   - PRZYKŁAD: "6X90 MM" -> dimension: "6x90 mm"
-   - PRZYKŁAD: "4X12" -> dimension: "4x12 mm"
-   - PRZYKŁAD: "M6X50" -> dimension: "M6x50 mm"
-   - dimension: ZAWSZE z małym "x" i jednostką "mm" (np. "5x40 mm").
+   - Obsługuj wymiary ułamkowe/dziesiętne z przecinkiem lub kropką oraz gwinty metryczne i średnice:
+     - "3,5X25 MM" lub "3.5x25" -> dimension: "3,5x25 mm"
+     - "4,2X35 MM" lub "4.2X35" -> dimension: "4,2x35 mm"
+     - "5X40 MM" -> dimension: "5x40 mm"
+     - "6X90 MM" -> dimension: "6x90 mm"
+     - "M6X50" -> dimension: "M6x50 mm"
+     - "M8X80" -> dimension: "M8x80 mm"
+     - "FI 8X60" lub "Ø8X60" -> dimension: "8x60 mm"
+   - dimension: ZAWSZE z małym "x" i końcówką " mm" (np. "4,2x35 mm", "5x40 mm", "M6x50 mm").
 
 3. TRZECIA LINIA (8-cyfrowy numer referencyjny LM):
    - Znajduje się bezpośrednio POD wymiarem i DOKŁADNIE NAD słowem "ZAPAS: X"!
    - PRZYKŁAD: Na etykiecie jest "82165193", a linijkę niżej "ZAPAS: 9" -> refNumber to "82165193"!
    - PRZYKŁAD: "44813216" nad "ZAPAS: 12" -> refNumber to "44813216".
    - Na etykietach papierowych znajduje się obok "Ref: 42660256".
-   - JEŚLI 8-cyfrowy ref byłby zasłonięty, weź 13-cyfrowy kod EAN spod poziomego kodu na dole (np. "5901171215451").
+   - JEŚLI 8-cyfrowy ref byłby nieczytelny, weź 13-cyfrowy kod EAN spod poziomego kodu na dole (np. "5901171215451").
    - refNumber: Czysty ciąg cyfr (8 lub 13 cyfr).
 
 4. CZWARTA LINIA: "ZAPAS: X" (stan magazynowy - zignoruj liczbę zapasu, służy tylko jako znacznik położenia refNumber).
 
-5. DOLNA LINIA: Poziomy kod kreskowy towaru z 13-cyfrowym kodem EAN (np. "5901171215451").
+5. DOLNA LINIA: Poziomy kod kreskowy towaru z 13-cyfrowym kodem EAN.
 
-6. PRAWA STRONA: Duża cena (np. "38,49 zł/Kg" lub "34,90 zł/kg").
+6. PRAWA STRONA: Duża cena (np. "38,49 zł/Kg", "34,90 zł/kg", "0,25 zł/szt."). Zawsze preferuj cenę wagową za kilogram (zł/kg), jeśli jest obecna.
 
 7. BEZWZGLĘDNY ZAKAZ:
    - ZIGNORUJ pionowy kod kreskowy na plastikowej ramce etykiety (zaczynający się od 147...)! To jest numer seryjny obudowy. NIGDY nie wpisuj go jako refNumber ani scaleCode.
@@ -95,7 +100,7 @@ Zwróć bezbłędne, precyzyjne dane dla każdej widocznej etykiety na pierwszym
 
     const modelConfig = {
       systemInstruction:
-        'Jesteś bezbłędnym skanerem etykiet ESL Leroy Merlin. Dla każdej etykiety musisz precyzyjnie zwrócić: scaleCode (2-3 cyfry z początku pierwszej linii, np. 155), name (nazwa bez kodu wagi), dimension (wymiar z drugiej linii, np. 5x40 mm), refNumber (8 cyfr znajdujących się bezpośrednio nad słowem ZAPAS, np. 82165193) oraz priceText.',
+        'Jesteś bezbłędnym skanerem etykiet ESL Leroy Merlin. Dla każdej etykiety musisz precyzyjnie zwrócić: scaleCode (2-3 cyfry z początku pierwszej linii, np. 155), name (nazwa bez kodu wagi, poprawny język polski), dimension (wymiar z drugiej linii standaryzowany do małego x i mm, np. 4,2x35 mm lub M6x50 mm), refNumber (8 cyfr znajdujących się bezpośrednio nad słowem ZAPAS, np. 82165193) oraz priceText (np. 38,49 zł/kg).',
       responseMimeType: 'application/json',
       responseSchema: {
         type: Type.ARRAY,
