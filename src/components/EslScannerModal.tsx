@@ -672,87 +672,6 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
     setErrorMsg(null);
   };
 
-  // Wstawienie przykładowych etykiet ESL (do natychmiastowego testu)
-  const handleLoadDemoEsl = (preset: 'userPhoto' | 'single' | 'shelfStrip') => {
-    setErrorMsg(null);
-    setImagePreview(null);
-    if (preset === 'userPhoto') {
-      const demoItem: RecognizedLabel = {
-        id: `demo_${Date.now()}_user`,
-        name: 'Wkręt uniwersalny',
-        dimension: '5x40 mm',
-        scaleCode: '155',
-        refNumber: '82165193',
-        priceText: '38,49 zł/kg',
-      };
-      handleItemsAcquired([demoItem]);
-    } else if (preset === 'single') {
-      const demoItem: RecognizedLabel = {
-        id: `demo_${Date.now()}_1`,
-        name: 'Wkręt do drewna stożkowy',
-        dimension: '4x40 mm',
-        scaleCode: '247',
-        refNumber: '42660256',
-        priceText: '32,90 zł/kg',
-      };
-      handleItemsAcquired([demoItem]);
-    } else {
-      // Cała listwa regałowa 4 etykiet
-      const demoItems: RecognizedLabel[] = [
-        {
-          id: `demo_${Date.now()}_1`,
-          name: 'Wkręt do drewna stożkowy TX',
-          dimension: '3.5x30 mm',
-          scaleCode: '241',
-          refNumber: '42660250',
-          priceText: '34,90 zł/kg',
-        },
-        {
-          id: `demo_${Date.now()}_2`,
-          name: 'Wkręt do drewna stożkowy TX',
-          dimension: '4x40 mm',
-          scaleCode: '242',
-          refNumber: '42660251',
-          priceText: '34,90 zł/kg',
-        },
-        {
-          id: `demo_${Date.now()}_3`,
-          name: 'Wkręt do drewna stożkowy TX',
-          dimension: '4.5x50 mm',
-          scaleCode: '243',
-          refNumber: '42660252',
-          priceText: '34,90 zł/kg',
-        },
-        {
-          id: `demo_${Date.now()}_4`,
-          name: 'Wkręt do drewna stożkowy TX',
-          dimension: '5x60 mm',
-          scaleCode: '244',
-          refNumber: '42660253',
-          priceText: '34,90 zł/kg',
-        },
-      ];
-      handleItemsAcquired(demoItems);
-    }
-  };
-
-  // Bezpośredni test skanowania zdjęcia użytkownika (IMG_20261024_103933843...)
-  const handleScanSampleImage = async () => {
-    try {
-      setIsScanning(true);
-      setErrorMsg(null);
-      setScanStatusText('Ładowanie zdjęcia z regału i analiza Gemini Vision...');
-      const sampleUrl = './assets/aistudio/IMG_20261024_103933843_HDR_AE_dbbcb193.jpg';
-      const resp = await fetch(sampleUrl);
-      if (!resp.ok) throw new Error('Brak pliku zdjęcia w public');
-      const blob = await resp.blob();
-      handleImageFile(new File([blob], 'IMG_155_wkret_5x40.jpg', { type: 'image/jpeg' }));
-    } catch {
-      handleLoadDemoEsl('userPhoto');
-      setIsScanning(false);
-    }
-  };
-
   const handleClearScannedList = () => {
     setRecognizedItems([]);
     setLastScanNotice(null);
@@ -892,36 +811,6 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
                 </span>
               </div>
             </label>
-
-            {/* Szybkie przykłady demo */}
-            <div className="flex items-center gap-1.5 flex-wrap">
-              <span className="text-[11px] text-slate-500 font-medium hidden xs:inline">Testuj:</span>
-              <button
-                type="button"
-                onClick={handleScanSampleImage}
-                className="px-2.5 py-1 text-[11px] font-bold text-emerald-800 bg-emerald-100/80 hover:bg-emerald-200 border border-emerald-300 rounded-lg transition-all cursor-pointer flex items-center gap-1 shadow-2xs"
-                title="Przetestuj skanowanie na Twoim zdjęciu etykiety (155 Wkręt 5x40 mm)"
-              >
-                <Sparkles className="w-3 h-3 text-emerald-600" />
-                <span>Twoje zdjęcie (155)</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => handleLoadDemoEsl('single')}
-                className="px-2 py-1 text-[11px] font-semibold text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors cursor-pointer"
-                title="Wstaw przykładową 1 etykietę ESL"
-              >
-                1 etykieta (247)
-              </button>
-              <button
-                type="button"
-                onClick={() => handleLoadDemoEsl('shelfStrip')}
-                className="px-2 py-1 text-[11px] font-semibold text-slate-700 bg-slate-50 hover:bg-slate-100 border border-slate-200 rounded-lg transition-colors cursor-pointer"
-                title="Wstaw przykładową listwę 4 etykiet z regału"
-              >
-                Listwa 4 szt.
-              </button>
-            </div>
           </div>
 
           {/* UKRYTE INPUTY PLIKÓW I NATIVE CAMERA */}
