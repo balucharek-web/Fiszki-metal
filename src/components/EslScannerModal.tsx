@@ -23,8 +23,10 @@ import {
   Zap,
   ShieldCheck,
   Lightbulb,
+  Eye,
 } from 'lucide-react';
-import { FiszkaItem } from '../types/label';
+import { FiszkaItem, SheetSettings } from '../types/label';
+import { FiszkaCard } from './FiszkaCard';
 import { scanBarcodeClientSide, DecodedBarcodeResult } from '../utils/barcodeScanner';
 import { scanEslWithClientOcr, OcrRecognizedLabel } from '../utils/eslOcrScanner';
 import {
@@ -35,6 +37,20 @@ import {
   calculateAverageLuminance,
 } from '../utils/cameraStabilizer';
 
+const DEFAULT_PREVIEW_SETTINGS: SheetSettings = {
+  itemsPerPage: 7,
+  showCuttingGuides: true,
+  cuttingGuideStyle: 'solid',
+  showScissorsIcon: false,
+  showRightSection: true,
+  brandName: 'STANDERS',
+  useStandersLogo: true,
+  scaleLabelText: 'Wpisz na wadze:',
+  badgeColor: '#d7f5c5',
+  includeCalibrationRuler: false,
+  verticalSpacingMm: 0,
+};
+
 interface EslScannerModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -43,6 +59,7 @@ interface EslScannerModalProps {
     target: 'appendSlots' | 'activePage' | 'newPage' | 'replaceAll'
   ) => void;
   activePageIndex: number;
+  settings?: SheetSettings;
 }
 
 interface RecognizedLabel {
@@ -59,6 +76,7 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
   onClose,
   onApply,
   activePageIndex,
+  settings,
 }) => {
   const [activeTab, setActiveTab] = useState<'upload' | 'camera'>('upload');
   const [imagePreview, setImagePreview] = useState<string | null>(null);
@@ -67,7 +85,50 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [lastScanNotice, setLastScanNotice] = useState<string | null>(null);
   const [recognizedItems, setRecognizedItems] = useState<RecognizedLabel[]>([]);
-  const [targetOption, setTargetOption] = useState<'appendSlots' | 'activePage' | 'newPage' | 'replaceAll'>('replaceAll');
+  const [targetOption, setTargetOption] = useState<'appendSlots' | 'activePage' | 'newPage' | 'replaceAll'>(() => {
+    try {
+      const saved = localStorage.getItem('standers_esl_target');
+      if (saved === 'replaceAll' || saved === 'appendSlots' || saved === 'activePage' || saved === 'newPage') {
+        return saved;
+      }
+    } catch {}
+    return 'appendSlots';
+  });
+
+  // Automatyczne natychmiastowe wgrywanie po rozpoznaniu etykiety (z natychmiastowym podglądem)
+  const [autoApplyImmediately, setAutoApplyImmediately] = useState<boolean>(() => {
+    try {
+      const saved = localStorage.getItem('standers_esl_auto_apply');
+      return saved === null ? true : saved !== 'false';
+    } catch {
+      return true;
+    }
+  });
+
+  // Podgląd wygenerowanej fiszki ze zeskanowaną etykietą
+  const [selectedPreviewIndex, setSelectedPreviewIndex] = useState<number>(0);
+  const previewContainerRef = useRef<HTMLDivElement>(null);
+  const [previewScale, setPreviewScale] = useState<number>(0.85);
+
+  // Dynamiczne dopasowanie skali fiszki (195mm) do szerokości okna
+  useEffect(() => {
+    if (!isOpen) return;
+    const calculateScale = () => {
+      if (previewContainerRef.current) {
+        const containerWidth = previewContainerRef.current.clientWidth - 24;
+        const naturalWidth = 737; // 195mm w standardowym 96 DPI
+        const scale = Math.min(0.95, Math.max(0.38, containerWidth / naturalWidth));
+        setPreviewScale(Math.round(scale * 100) / 100);
+      }
+    };
+    calculateScale();
+    const t = setTimeout(calculateScale, 150);
+    window.addEventListener('resize', calculateScale);
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener('resize', calculateScale);
+    };
+  }, [isOpen, recognizedItems.length]);
 
   // Camera state
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -505,11 +566,7 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
             };
           });
 
-          setRecognizedItems((prev) => [...prev, ...formatted]);
-          setLastScanNotice(
-            `Dodano ${formatted.length === 1 ? '1 etykietę' : `${formatted.length} etykiety`} do kolejki (razem w kolejce: ${recognizedItems.length + formatted.length})`
-          );
-          setErrorMsg(null);
+          handleItemsAcquired(formatted);
           setIsScanning(false);
           return;
         }
@@ -576,11 +633,7 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
         priceText: finalPrice,
       };
 
-      setRecognizedItems((prev) => [...prev, recognizedItem]);
-      setLastScanNotice(
-        `✓ Odczytano: ${finalName}${finalDimension ? ` ${finalDimension}` : ''} | Kod wagi: ${finalScale || '—'} | Nr ref: ${finalRefNumber || '—'} (pozycja #${recognizedItems.length + 1})`
-      );
-      setErrorMsg(null);
+      handleItemsAcquired([recognizedItem]);
       return;
     }
 
@@ -588,6 +641,35 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
     setErrorMsg(
       'Nie udało się odczytać etykiety ani kodu kreskowego z tego ujęcia. Skieruj aparat bezpośrednio na wyświetlacz ESL pod dobrym oświetleniem lub dodaj wiersz przyciskiem „Dodaj wiersz”.'
     );
+  };
+
+  // Centralne dodawanie pozycji: natychmiastowe wgrywanie (jeśli włączone) lub podgląd
+  const handleItemsAcquired = (newItems: RecognizedLabel[]) => {
+    if (newItems.length === 0) return;
+
+    if (autoApplyImmediately) {
+      const finalItems: FiszkaItem[] = newItems.map((r) => ({
+        id: r.id,
+        name: r.name.trim() || 'Wkręt do drewna',
+        dimension: r.dimension.trim(),
+        scaleCode: r.scaleCode.trim(),
+        refNumber: r.refNumber.trim(),
+        priceText: r.priceText.trim() || 'Cena',
+      }));
+      onApply(finalItems, targetOption);
+      onClose();
+      return;
+    }
+
+    setRecognizedItems((prev) => {
+      const combined = [...prev, ...newItems];
+      setSelectedPreviewIndex(combined.length - 1);
+      return combined;
+    });
+    setLastScanNotice(
+      `✓ Odczytano: ${newItems[0].name}${newItems[0].dimension ? ` ${newItems[0].dimension}` : ''} | Kod wagi: ${newItems[0].scaleCode || '—'} | Nr ref: ${newItems[0].refNumber || '—'}`
+    );
+    setErrorMsg(null);
   };
 
   // Wstawienie przykładowych etykiet ESL (do natychmiastowego testu)
@@ -603,8 +685,7 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
         refNumber: '82165193',
         priceText: '38,49 zł/kg',
       };
-      setRecognizedItems((prev) => [...prev, demoItem]);
-      setLastScanNotice(`✓ Załadowano zweryfikowane dane etykiety: 155 Wkręt uniwersalny 5x40 mm, ref 82165193`);
+      handleItemsAcquired([demoItem]);
     } else if (preset === 'single') {
       const demoItem: RecognizedLabel = {
         id: `demo_${Date.now()}_1`,
@@ -614,8 +695,7 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
         refNumber: '42660256',
         priceText: '32,90 zł/kg',
       };
-      setRecognizedItems((prev) => [...prev, demoItem]);
-      setLastScanNotice(`Dodano przykładową etykietę: 4x40 mm (w kolejce: ${recognizedItems.length + 1})`);
+      handleItemsAcquired([demoItem]);
     } else {
       // Cała listwa regałowa 4 etykiet
       const demoItems: RecognizedLabel[] = [
@@ -652,8 +732,7 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
           priceText: '34,90 zł/kg',
         },
       ];
-      setRecognizedItems((prev) => [...prev, ...demoItems]);
-      setLastScanNotice(`Dodano listwę 4 etykiet (w kolejce: ${recognizedItems.length + demoItems.length})`);
+      handleItemsAcquired(demoItems);
     }
   };
 
@@ -753,8 +832,8 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
 
         {/* ZAWARTOŚĆ GŁÓWNA */}
         <div className="p-4 sm:p-5 flex-1 overflow-y-auto flex flex-col gap-4">
-          {/* PRZEŁĄCZNIK ZAKŁADEK ŹRÓDŁA */}
-          <div className="flex items-center justify-between gap-2 border-b border-slate-200 pb-3">
+          {/* PRZEŁĄCZNIK ZAKŁADEK ŹRÓDŁA I AUTO-WGRYWANIE */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-2.5 border-b border-slate-200 pb-3">
             <div className="flex items-center gap-1.5 p-1 bg-slate-100 rounded-xl border border-slate-200 text-xs font-semibold">
               <button
                 onClick={() => {
@@ -786,6 +865,33 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
                 <span>Użyj kamery / aparatu</span>
               </button>
             </div>
+
+            {/* Przełącznik: Automatyczne natychmiastowe wgrywanie z podglądem */}
+            <label
+              className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border transition-all cursor-pointer select-none ${
+                autoApplyImmediately
+                  ? 'bg-emerald-50 border-emerald-400 text-emerald-950 shadow-2xs font-bold'
+                  : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 font-semibold'
+              }`}
+              title="Włącza automatyczne wgrywanie danych bezpośrednio na fiszkę natychmiast po odczytaniu zdjęcia z kamery"
+            >
+              <input
+                type="checkbox"
+                checked={autoApplyImmediately}
+                onChange={(e) => {
+                  setAutoApplyImmediately(e.target.checked);
+                  localStorage.setItem('standers_esl_auto_apply', String(e.target.checked));
+                }}
+                className="accent-emerald-600 w-4 h-4 rounded cursor-pointer"
+              />
+              <div className="flex items-center gap-1.5 text-xs">
+                <Zap className={`w-3.5 h-3.5 ${autoApplyImmediately ? 'text-emerald-600 fill-emerald-600' : 'text-slate-400'}`} />
+                <span>Wgrywaj od razu na fiszkę</span>
+                <span className="text-[10px] text-emerald-700 bg-emerald-100/70 border border-emerald-300 px-1.5 py-0.2 rounded font-mono font-medium">
+                  {autoApplyImmediately ? 'AUTO-PODGLĄD' : 'KOLEJKA'}
+                </span>
+              </div>
+            </label>
 
             {/* Szybkie przykłady demo */}
             <div className="flex items-center gap-1.5 flex-wrap">
@@ -1221,9 +1327,109 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
             </div>
           )}
 
-          {/* TABELA ROZPOZNANYCH DANYCH */}
+          {/* TABELA ROZPOZNANYCH DANYCH & PODGLĄD WYGENEROWANEJ FISZKI */}
           {recognizedItems.length > 0 && (
-            <div className="flex flex-col gap-2.5 border-t border-slate-200 pt-3">
+            <div className="flex flex-col gap-3.5 border-t border-slate-200 pt-3">
+              {/* NAJWAŻNIEJSZE: PODGLĄD WYGENEROWANEJ FISZKI ZE ZESKANOWANĄ ETYKIETĄ */}
+              {(() => {
+                const activeItem = recognizedItems[selectedPreviewIndex] || recognizedItems[0];
+                const previewFiszka: FiszkaItem = {
+                  id: activeItem.id,
+                  name: activeItem.name || 'Wkręt do drewna',
+                  dimension: activeItem.dimension || '',
+                  scaleCode: activeItem.scaleCode || '',
+                  refNumber: activeItem.refNumber || '',
+                  priceText: activeItem.priceText || 'Cena',
+                };
+
+                return (
+                  <div className="bg-gradient-to-b from-slate-900 via-slate-900 to-slate-950 text-white p-4 rounded-2xl border border-slate-700 shadow-xl flex flex-col gap-3">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2.5 border-b border-slate-800 pb-2.5">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-xl bg-emerald-500/20 border border-emerald-400/40 flex items-center justify-center text-emerald-400 shrink-0">
+                          <Sparkles className="w-4.5 h-4.5 text-emerald-400" />
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <h4 className="font-bold text-xs sm:text-sm text-emerald-300">
+                              Podgląd wygenerowanej fiszki ze zeskanowaną etykietą
+                            </h4>
+                            <span className="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 px-2 py-0.2 rounded-full font-mono font-bold">
+                              195 × 40 mm
+                            </span>
+                          </div>
+                          <p className="text-[11px] text-slate-400">
+                            Tak wygląda Twoja fiszka Standers po odczytaniu z etykiety regałowej ESL
+                          </p>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={handleConfirmApply}
+                        className="w-full sm:w-auto px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black text-xs rounded-xl shadow-lg shadow-emerald-950/60 flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-95"
+                      >
+                        <Zap className="w-4 h-4 fill-slate-950" />
+                        <span>Wgraj od razu na arkusz i zobacz podgląd</span>
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+
+                    {/* KONTENER SKALOWANEJ FISZKI (DOPASOWANY DO EKRANU) */}
+                    <div
+                      ref={previewContainerRef}
+                      className="w-full flex items-center justify-center overflow-hidden py-3 bg-slate-950/80 rounded-xl border border-slate-800"
+                      style={{
+                        height: `${Math.round(152 * previewScale + 18)}px`,
+                        minHeight: '85px',
+                      }}
+                    >
+                      <div
+                        style={{
+                          width: '195mm',
+                          height: '40mm',
+                          transform: `scale(${previewScale})`,
+                          transformOrigin: 'center center',
+                          boxShadow: '0 20px 30px -10px rgba(0, 0, 0, 0.6), 0 0 15px rgba(16, 185, 129, 0.25)',
+                        }}
+                      >
+                        <FiszkaCard
+                          item={previewFiszka}
+                          settings={settings || DEFAULT_PREVIEW_SETTINGS}
+                          isPrintMode={false}
+                          onUpdate={(updated) => {
+                            const field = Object.keys(updated)[0] as keyof RecognizedLabel;
+                            const val = Object.values(updated)[0] as string;
+                            handleUpdateItem(activeItem.id, field, val);
+                          }}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Przełączanie miniatur jeśli jest więcej niż 1 etykieta */}
+                    {recognizedItems.length > 1 && (
+                      <div className="flex items-center gap-1.5 flex-wrap pt-0.5 text-xs">
+                        <span className="text-[11px] text-slate-400 font-medium">Podgląd etykiety:</span>
+                        {recognizedItems.map((it, idx) => (
+                          <button
+                            key={it.id}
+                            type="button"
+                            onClick={() => setSelectedPreviewIndex(idx)}
+                            className={`px-2.5 py-1 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                              selectedPreviewIndex === idx
+                                ? 'bg-emerald-500 text-slate-950 shadow-xs'
+                                : 'bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700'
+                            }`}
+                          >
+                            #{idx + 1} {it.dimension ? `${it.dimension} ` : ''}(Waga: {it.scaleCode || '—'})
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-bold text-slate-800">
@@ -1491,22 +1697,23 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
             onClick={onClose}
             className="px-4 py-2 text-xs font-medium text-slate-600 hover:text-slate-900 transition-colors cursor-pointer"
           >
-            Anuluj
+            Zamknij
           </button>
 
           <button
             onClick={handleConfirmApply}
             disabled={recognizedItems.length === 0}
-            className={`px-5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer ${
+            className={`px-5 py-2.5 rounded-xl text-xs font-bold flex items-center gap-2 transition-all cursor-pointer ${
               recognizedItems.length > 0
-                ? 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm'
+                ? 'bg-emerald-600 hover:bg-emerald-500 text-white shadow-md active:scale-95'
                 : 'bg-slate-200 text-slate-400 cursor-not-allowed'
             }`}
           >
-            <Check className="w-4 h-4" />
+            <Zap className="w-4 h-4 fill-white" />
             <span>
-              Wstaw fiszki ({recognizedItems.length})
+              Wgraj na fiszki i zobacz podgląd ({recognizedItems.length})
             </span>
+            <ArrowRight className="w-3.5 h-3.5" />
           </button>
         </div>
       </div>

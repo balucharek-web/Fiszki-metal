@@ -49,9 +49,11 @@ export const FiszkaCard: React.FC<FiszkaCardProps> = ({
   return (
     <div
       onClick={onSelect}
-      className={`relative box-border bg-white flex items-center overflow-hidden text-black border border-slate-300 ${
-        !isPrintMode ? 'transition-all hover:border-slate-400 group' : ''
-      }`}
+      className={`relative box-border bg-white flex items-center overflow-hidden text-black border ${
+        isSelected && !isPrintMode
+          ? 'border-emerald-500 ring-4 ring-emerald-500/40 shadow-xl bg-emerald-50/15'
+          : 'border-slate-300'
+      } ${!isPrintMode ? 'transition-all hover:border-slate-400 group cursor-pointer' : ''}`}
       style={{
         width: '195mm',
         height: '40mm',
@@ -61,6 +63,13 @@ export const FiszkaCard: React.FC<FiszkaCardProps> = ({
         maxHeight: '40mm',
       }}
     >
+      {/* Visual highlight tag for newly updated or selected fiszka */}
+      {!isPrintMode && isSelected && (
+        <div className="no-print absolute top-1 right-2 z-10 px-2 py-0.5 bg-emerald-600 text-white text-[9px] font-bold rounded shadow-md flex items-center gap-1 select-none animate-pulse">
+          <span>✓ Zeskanowana fiszka</span>
+        </div>
+      )}
+
       {/* Subtle index mark for screen */}
       {!isPrintMode && typeof index === 'number' && (
         <span className="no-print absolute top-1 left-1.5 text-[8px] font-mono text-slate-300 select-none pointer-events-none">

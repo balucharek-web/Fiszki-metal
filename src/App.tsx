@@ -27,6 +27,9 @@ import {
   Ruler,
   ChevronDown,
   Camera,
+  CheckCircle2,
+  X,
+  Zap,
 } from 'lucide-react';
 import { generateFillablePdf, downloadBlob } from './utils/pdfGenerator';
 
@@ -139,6 +142,14 @@ export default function App() {
   const [isExcelModalOpen, setIsExcelModalOpen] = useState(false);
   const [isSeriesModalOpen, setIsSeriesModalOpen] = useState(false);
   const [isEslModalOpen, setIsEslModalOpen] = useState(false);
+
+  // Podświetlenie i powiadomienie po wgraniu ze skanera
+  const [highlightedItemId, setHighlightedItemId] = useState<string | null>(null);
+  const [recentScanToast, setRecentScanToast] = useState<{
+    title: string;
+    description: string;
+    itemCount: number;
+  } | null>(null);
 
   const mainScrollRef = useRef<HTMLDivElement>(null);
 
@@ -379,12 +390,15 @@ export default function App() {
   ) => {
     if (scannedItems.length === 0) return;
 
+    const firstScanned = scannedItems[0];
+    const targetSlotId = firstScanned.id || `fiszka_esl_${Date.now()}_0`;
+
     if (target === 'replaceAll') {
       // Idealnie dopasowana liczba stron A4 (np. 8 fiszek = dokładnie 2 strony: 7 na str. 1, 1 na str. 2)
       const needed = Math.max(7, Math.ceil(scannedItems.length / 7) * 7);
       const padded: FiszkaItem[] = scannedItems.map((si, idx) => ({
         ...si,
-        id: `fiszka_esl_${Date.now()}_${idx}`,
+        id: si.id || `fiszka_esl_${Date.now()}_${idx}`,
       }));
 
       while (padded.length < needed) {
@@ -404,7 +418,7 @@ export default function App() {
       const needed = Math.max(7, Math.ceil(scannedItems.length / 7) * 7);
       const padded: FiszkaItem[] = scannedItems.map((si, idx) => ({
         ...si,
-        id: `fiszka_esl_${Date.now()}_${idx}`,
+        id: si.id || `fiszka_esl_${Date.now()}_${idx}`,
       }));
 
       while (padded.length < needed) {
@@ -467,6 +481,7 @@ export default function App() {
 
           next[currentSlot] = {
             ...next[currentSlot],
+            id: si.id || next[currentSlot].id,
             name: si.name,
             dimension: si.dimension,
             scaleCode: si.scaleCode,
@@ -514,6 +529,7 @@ export default function App() {
 
           next[targetIdx] = {
             ...next[targetIdx],
+            id: si.id || next[targetIdx].id,
             name: si.name,
             dimension: si.dimension,
             scaleCode: si.scaleCode,
@@ -540,6 +556,20 @@ export default function App() {
         scrollToPage(activePage);
       }, 100);
     }
+
+    // Podświetlenie nowo wgranej fiszki i eleganckie powiadomienie z podglądem
+    setHighlightedItemId(targetSlotId);
+    setTimeout(() => {
+      setHighlightedItemId((prev) => (prev === targetSlotId ? null : prev));
+    }, 7000);
+
+    setRecentScanToast({
+      title: scannedItems.length === 1
+        ? `Wgrano etykietę: ${firstScanned.dimension ? `${firstScanned.dimension} ` : ''}${firstScanned.name}`
+        : `Wgrano ${scannedItems.length} etykiet na arkusz`,
+      description: `Kod wagi: ${firstScanned.scaleCode || '—'} · Nr ref: ${firstScanned.refNumber || '—'} · Cena: ${firstScanned.priceText || '—'}`,
+      itemCount: scannedItems.length,
+    });
   };
 
   // Generowanie i pobranie PDF z aktualnymi danymi lub czystego
@@ -1140,8 +1170,8 @@ export default function App() {
                       pageIndex={pageIdx}
                       totalPages={totalPages}
                       settings={settings}
-                      selectedId={null}
-                      onSelectItem={() => {}}
+                      selectedId={highlightedItemId}
+                      onSelectItem={(id) => setHighlightedItemId((prev) => (prev === id ? null : id))}
                       onUpdateItem={handleUpdateItem}
                       isPrintMode={false}
                     />
@@ -1184,6 +1214,58 @@ export default function App() {
         })}
       </div>
 
+      {/* FLOATING TOAST: Informacja o wgraniu fiszki ze skanera */}
+      {recentScanToast && (
+        <div className="no-print fixed bottom-6 right-6 z-50 max-w-sm sm:max-w-md bg-slate-900/95 text-white rounded-2xl p-4 shadow-2xl border border-emerald-500/60 flex flex-col gap-2.5 backdrop-blur-md animate-in slide-in-from-bottom-5 duration-200">
+          <div className="flex items-start justify-between gap-3">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-emerald-500/20 border border-emerald-400/40 flex items-center justify-center text-emerald-400 shrink-0">
+                <CheckCircle2 className="w-5 h-5 text-emerald-400" />
+              </div>
+              <div>
+                <h4 className="text-xs sm:text-sm font-bold text-white flex items-center gap-2">
+                  <span>{recentScanToast.title}</span>
+                  <span className="text-[10px] bg-emerald-500/20 text-emerald-300 border border-emerald-400/30 px-1.5 py-0.2 rounded font-mono">
+                    WGRANO
+                  </span>
+                </h4>
+                <p className="text-[11px] text-slate-300 font-mono mt-0.5">
+                  {recentScanToast.description}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setRecentScanToast(null)}
+              className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-slate-800 transition-colors cursor-pointer"
+              title="Zamknij"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+          <div className="flex items-center justify-between gap-2 pt-2 border-t border-slate-800">
+            <span className="text-[10px] text-slate-400">
+              Fiszka jest podświetlona na zielono na arkuszu
+            </span>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setIsEslModalOpen(true)}
+                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer shadow-xs active:scale-95"
+              >
+                <Camera className="w-3.5 h-3.5" />
+                <span>Skanuj kolejną</span>
+              </button>
+              <button
+                onClick={() => window.print()}
+                className="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold rounded-lg flex items-center gap-1.5 transition-colors cursor-pointer border border-slate-700"
+              >
+                <Printer className="w-3.5 h-3.5 text-slate-400" />
+                <span>Drukuj A4</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* MODAL 1: Wklej ze schowka / Excela */}
       <ExcelImportModal
         isOpen={isExcelModalOpen}
@@ -1207,6 +1289,7 @@ export default function App() {
         onClose={() => setIsEslModalOpen(false)}
         onApply={handleApplyEslItems}
         activePageIndex={activePage}
+        settings={settings}
       />
     </div>
   );
