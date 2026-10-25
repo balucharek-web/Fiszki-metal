@@ -95,16 +95,6 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
     return 'appendSlots';
   });
 
-  // Automatyczne natychmiastowe wgrywanie po rozpoznaniu etykiety (z natychmiastowym podglądem)
-  const [autoApplyImmediately, setAutoApplyImmediately] = useState<boolean>(() => {
-    try {
-      const saved = localStorage.getItem('standers_esl_auto_apply');
-      return saved === null ? true : saved !== 'false';
-    } catch {
-      return true;
-    }
-  });
-
   // Podgląd wygenerowanej fiszki ze zeskanowaną etykietą
   const [selectedPreviewIndex, setSelectedPreviewIndex] = useState<number>(0);
   const previewContainerRef = useRef<HTMLDivElement>(null);
@@ -643,33 +633,20 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
     );
   };
 
-  // Centralne dodawanie pozycji: natychmiastowe wgrywanie (jeśli włączone) lub podgląd
+  // Centralne dodawanie pozycji: ZAWSZE na stałe natychmiastowe wgrywanie z auto-podglądem
   const handleItemsAcquired = (newItems: RecognizedLabel[]) => {
     if (newItems.length === 0) return;
 
-    if (autoApplyImmediately) {
-      const finalItems: FiszkaItem[] = newItems.map((r) => ({
-        id: r.id,
-        name: r.name.trim() || '',
-        dimension: r.dimension.trim(),
-        scaleCode: r.scaleCode.trim(),
-        refNumber: r.refNumber.trim(),
-        priceText: r.priceText.trim() || '',
-      }));
-      onApply(finalItems, targetOption);
-      onClose();
-      return;
-    }
-
-    setRecognizedItems((prev) => {
-      const combined = [...prev, ...newItems];
-      setSelectedPreviewIndex(combined.length - 1);
-      return combined;
-    });
-    setLastScanNotice(
-      `✓ Odczytano: ${newItems[0].name}${newItems[0].dimension ? ` ${newItems[0].dimension}` : ''} | Kod wagi: ${newItems[0].scaleCode || '—'} | Nr ref: ${newItems[0].refNumber || '—'}`
-    );
-    setErrorMsg(null);
+    const finalItems: FiszkaItem[] = newItems.map((r) => ({
+      id: r.id,
+      name: r.name.trim() || '',
+      dimension: r.dimension.trim(),
+      scaleCode: r.scaleCode.trim(),
+      refNumber: r.refNumber.trim(),
+      priceText: r.priceText.trim() || '',
+    }));
+    onApply(finalItems, targetOption);
+    onClose();
   };
 
   const handleClearScannedList = () => {
@@ -784,33 +761,6 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
                 <span>Użyj kamery / aparatu</span>
               </button>
             </div>
-
-            {/* Przełącznik: Automatyczne natychmiastowe wgrywanie z podglądem */}
-            <label
-              className={`flex items-center gap-2 px-3 py-1.5 rounded-xl border transition-all cursor-pointer select-none ${
-                autoApplyImmediately
-                  ? 'bg-emerald-50 border-emerald-400 text-emerald-950 shadow-2xs font-bold'
-                  : 'bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100 font-semibold'
-              }`}
-              title="Włącza automatyczne wgrywanie danych bezpośrednio na fiszkę natychmiast po odczytaniu zdjęcia z kamery"
-            >
-              <input
-                type="checkbox"
-                checked={autoApplyImmediately}
-                onChange={(e) => {
-                  setAutoApplyImmediately(e.target.checked);
-                  localStorage.setItem('standers_esl_auto_apply', String(e.target.checked));
-                }}
-                className="accent-emerald-600 w-4 h-4 rounded cursor-pointer"
-              />
-              <div className="flex items-center gap-1.5 text-xs">
-                <Zap className={`w-3.5 h-3.5 ${autoApplyImmediately ? 'text-emerald-600 fill-emerald-600' : 'text-slate-400'}`} />
-                <span>Wgrywaj od razu na fiszkę</span>
-                <span className="text-[10px] text-emerald-700 bg-emerald-100/70 border border-emerald-300 px-1.5 py-0.2 rounded font-mono font-medium">
-                  {autoApplyImmediately ? 'AUTO-PODGLĄD' : 'KOLEJKA'}
-                </span>
-              </div>
-            </label>
           </div>
 
           {/* UKRYTE INPUTY PLIKÓW I NATIVE CAMERA */}
