@@ -45,16 +45,36 @@ const INITIAL_LABELS_7: FiszkaItem[] = [
 
 export default function App() {
   const [items, setItems] = useState<FiszkaItem[]>(() => {
-    const saved = localStorage.getItem('standers_labels_multi_v1');
+    // 1. Zawsze czyść wszystkie stare klucze z poprzednich wersji z danymi testowymi
+    try {
+      localStorage.removeItem('standers_labels_multi_v1');
+      localStorage.removeItem('standers_labels_v2');
+      localStorage.removeItem('standers_labels_v3');
+      localStorage.removeItem('standers_labels_v4_clean');
+      localStorage.removeItem('standers_labels_v5_empty');
+      localStorage.removeItem('standers_labels_v5_blank');
+    } catch {}
+
+    const saved = localStorage.getItem('standers_labels_v6_pristine');
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
         if (Array.isArray(parsed) && parsed.length >= 7) {
-          // Jeśli w pamięci przeglądarki są stare przykładowe dane wkrętów (247-241 / 42660256), zastępujemy je czystym arkuszem
-          const isOldDemo = parsed.some(
-            (p: FiszkaItem) => (p.scaleCode === '247' && p.dimension === '6x80 mm') || p.refNumber === '42660256'
+          // Jeśli w zapisanych danych nadal znajdują się testowe wkręty lub kody ze starych sesji, czyścimy je
+          const hasOldSampleData = parsed.some(
+            (p: FiszkaItem) =>
+              p.scaleCode === '247' ||
+              p.scaleCode === '155' ||
+              p.scaleCode === '980' ||
+              p.refNumber === '42660256' ||
+              p.refNumber === '82165193' ||
+              p.refNumber === '99146892' ||
+              p.name?.toLowerCase().includes('molly') ||
+              p.name?.toLowerCase().includes('uniwersaln') ||
+              p.name?.toLowerCase().includes('wkręt') ||
+              p.name?.toLowerCase().includes('wkret')
           );
-          if (!isOldDemo) {
+          if (!hasOldSampleData) {
             return parsed;
           }
         }
@@ -114,7 +134,7 @@ export default function App() {
 
   // Sync labels to local storage
   useEffect(() => {
-    localStorage.setItem('standers_labels_multi_v1', JSON.stringify(items));
+    localStorage.setItem('standers_labels_v6_pristine', JSON.stringify(items));
   }, [items]);
 
   // Sync settings to local storage
@@ -260,41 +280,54 @@ export default function App() {
   // Usunięcie strony
   const handleRemovePage = (pageIdx: number) => {
     if (totalPages <= 1) return;
-    if (window.confirm(`Czy na pewno chcesz usunąć stronę ${pageIdx + 1}?`)) {
-      setItems((prev) => {
-        const start = pageIdx * 7;
-        const end = start + 7;
-        return prev.filter((_, idx) => idx < start || idx >= end);
-      });
-    }
+    setItems((prev) => {
+      const start = pageIdx * 7;
+      const end = start + 7;
+      return prev.filter((_, idx) => idx < start || idx >= end);
+    });
+    setRecentScanToast({
+      title: 'Usunięto stronę',
+      description: `Strona ${pageIdx + 1} została usunięta.`,
+      itemCount: 7,
+    });
   };
 
   // Wyczyszczenie pól na stronie
   const handleClearPage = (pageIdx: number) => {
-    if (window.confirm(`Wyczyścić wszystkie fiszki na stronie ${pageIdx + 1}?`)) {
-      setItems((prev) =>
-        prev.map((it, idx) => {
-          if (idx >= pageIdx * 7 && idx < (pageIdx + 1) * 7) {
-            return {
-              ...it,
-              name: '',
-              dimension: '',
-              scaleCode: '',
-              refNumber: '',
-              priceText: '',
-            };
-          }
-          return it;
-        })
-      );
-    }
+    setItems((prev) =>
+      prev.map((it, idx) => {
+        if (idx >= pageIdx * 7 && idx < (pageIdx + 1) * 7) {
+          return {
+            ...it,
+            name: '',
+            dimension: '',
+            scaleCode: '',
+            refNumber: '',
+            priceText: '',
+          };
+        }
+        return it;
+      })
+    );
+    setRecentScanToast({
+      title: 'Wyczyszczono stronę',
+      description: `Wszystkie fiszki na stronie ${pageIdx + 1} zostały wyczyszczone.`,
+      itemCount: 7,
+    });
   };
 
   // Reset do 1 domyślnej czystej strony
   const handleReset = () => {
-    if (window.confirm('Czy chcesz zresetować wszystkie fiszki do czystego arkusza (1 strona)?')) {
-      setItems(INITIAL_LABELS_7);
-    }
+    setItems(INITIAL_LABELS_7);
+    setActivePage(0);
+    try {
+      localStorage.removeItem('standers_labels_v6_pristine');
+    } catch {}
+    setRecentScanToast({
+      title: 'Wyczyszczono arkusz',
+      description: 'Arkusz został zresetowany – wszystkie fiszki są puste.',
+      itemCount: 7,
+    });
   };
 
   // Import z Excela
@@ -1040,6 +1073,16 @@ export default function App() {
             <Camera className="w-3.5 h-3.5 text-teal-600" />
             <span>Skanuj ESL</span>
           </button>
+
+          {/* Szybki 1-klik: Wyczyść arkusz (pusty szablon) */}
+          <button
+            onClick={handleReset}
+            className="px-2.5 py-1 text-xs font-bold rounded-lg border border-rose-300 bg-rose-50 hover:bg-rose-100 text-rose-700 flex items-center gap-1.5 transition-all cursor-pointer shadow-2xs"
+            title="Wyczyść wszystkie pola i zresetuj do pustego arkusza"
+          >
+            <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+            <span>Wyczyść wszystko</span>
+          </button>
         </div>
 
         <div className="flex flex-col items-center gap-6 w-full max-w-5xl pb-12">
@@ -1085,10 +1128,11 @@ export default function App() {
 
                     <button
                       onClick={() => handleClearPage(pageIdx)}
-                      className="px-2 py-0.5 text-[11px] text-slate-600 hover:text-slate-900 bg-slate-100 hover:bg-slate-200 rounded border border-slate-200 transition-colors cursor-pointer"
-                      title={`Wyczyść pola na stronie ${pageIdx + 1}`}
+                      className="px-2 py-0.5 text-[11px] font-semibold text-rose-700 hover:text-rose-900 bg-rose-50 hover:bg-rose-100 rounded border border-rose-200 transition-colors cursor-pointer flex items-center gap-1"
+                      title={`Wyczyść wszystkie fiszki na stronie ${pageIdx + 1}`}
                     >
-                      Wyczyść
+                      <Trash2 className="w-3 h-3 text-rose-500" />
+                      <span>Wyczyść stronę</span>
                     </button>
 
                     {totalPages > 1 && (
