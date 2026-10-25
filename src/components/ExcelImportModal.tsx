@@ -122,11 +122,11 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
     // Pad to multiple of 7 if replace mode, so full A4 sheets are maintained
     const newFiszki: FiszkaItem[] = parsedRows.map((r, i) => ({
       id: `imported_${Date.now()}_${i + 1}`,
-      name: r.name || 'Wkręt do drewna',
+      name: r.name || '',
       dimension: r.dimension || '',
       scaleCode: r.scaleCode || '',
       refNumber: r.refNumber || '',
-      priceText: r.priceText || 'Cena',
+      priceText: r.priceText || '',
     }));
 
     // If replacing and less than 7, pad to 7 items
@@ -135,11 +135,11 @@ export const ExcelImportModal: React.FC<ExcelImportModalProps> = ({
       for (let i = 0; i < needed; i++) {
         newFiszki.push({
           id: `padded_${Date.now()}_${i}`,
-          name: newFiszki[0]?.name || 'Wkręt do drewna',
+          name: newFiszki[0]?.name || '',
           dimension: '',
           scaleCode: '',
           refNumber: '',
-          priceText: 'Cena',
+          priceText: '',
         });
       }
     }
