@@ -224,6 +224,14 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
     return 'appendSlots';
   });
 
+  // Stan kolejki wsadowej przy wgrywaniu wielu zdjęć naraz (Multi-Upload)
+  const [batchProgress, setBatchProgress] = useState<{
+    current: number;
+    total: number;
+    currentName: string;
+    successCount: number;
+  } | null>(null);
+
   // Podgląd wygenerowanej fiszki ze zeskanowaną etykietą
   const [selectedPreviewIndex, setSelectedPreviewIndex] = useState<number>(0);
   const previewContainerRef = useRef<HTMLDivElement>(null);
@@ -286,6 +294,7 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
       setCameraPermissionDenied(false);
       setIsCameraStarting(false);
       setRecognizedItems([]);
+      setBatchProgress(null);
     }
   }, [isOpen]);
 
@@ -308,7 +317,7 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
         if (items[i].type.indexOf('image') !== -1) {
           const blob = items[i].getAsFile();
           if (blob) {
-            handleImageFile(blob);
+            handleMultipleImageFiles([blob]);
             break;
           }
         }
@@ -575,8 +584,18 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
       }
 
       setImagePreview(finalDataUrl);
+      setIsScanning(true);
+      setErrorMsg(null);
       const compressed = await compressImageForApi(finalDataUrl, 1920);
-      await runRecognition(compressed, 'image/jpeg');
+      const recognized = await recognizeSingleEslImage(compressed, 'image/jpeg');
+      setIsScanning(false);
+      if (recognized.length > 0) {
+        handleItemsAcquired(recognized);
+      } else {
+        setErrorMsg(
+          'Nie udało się odczytać etykiety ani kodu kreskowego z tego ujęcia. Skieruj aparat bezpośrednio na wyświetlacz ESL pod dobrym oświetleniem.'
+        );
+      }
     } catch (err: any) {
       console.warn('Błąd podczas przechwytywania klatki:', err);
       setErrorMsg('Nie udało się wykonać zdjęcia. Spróbuj ponownie.');
@@ -586,42 +605,21 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
     }
   };
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      handleImageFile(file);
-    }
+  const readFileAsDataUrl = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
   };
 
-  const handleImageFile = (file: File) => {
-    setErrorMsg(null);
-    const reader = new FileReader();
-    reader.onload = async (e) => {
-      const result = e.target?.result as string;
-      if (result) {
-        setImagePreview(result);
-        const compressed = await compressImageForApi(result, 1920);
-        runRecognition(compressed, file.type || 'image/jpeg');
-      }
-    };
-    reader.readAsDataURL(file);
-  };
-
-  const handleDrop = (e: React.DragEvent) => {
-    e.preventDefault();
-    const file = e.dataTransfer.files?.[0];
-    if (file && file.type.startsWith('image/')) {
-      handleImageFile(file);
-    }
-  };
-
-  // Skanowanie: hybrydowe (lokalny czytnik kodów kreskowych + Gemini Vision + silnik OCR w przeglądarce)
-  const runRecognition = async (base64Image: string, mimeType: string) => {
-    setIsScanning(true);
-    setErrorMsg(null);
-    setScanStatusText('Skanowanie kodu kreskowego...');
-
-    // 1. Zawsze próbujemy dekodować kod kreskowy/QR natychmiast w przeglądarce
+  // Rozpoznawanie pojedynczej etykiety (izolowane, w 100% bez mieszania danych między zdjęciami)
+  const recognizeSingleEslImage = async (
+    base64Image: string,
+    mimeType: string
+  ): Promise<RecognizedLabel[]> => {
+    // 1. Dekodowanie kodu kreskowego/QR natychmiast w przeglądarce
     let clientBarcode: DecodedBarcodeResult | null = null;
     try {
       clientBarcode = await scanBarcodeClientSide(base64Image);
@@ -632,7 +630,7 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
       console.warn('Lokalny skaner kodów:', e);
     }
 
-    // 2. Próbujemy wywołać serwer Gemini AI Vision (jeśli środowisko posiada backend Node / AI Studio)
+    // 2. Wywołanie serwera Gemini AI Vision
     try {
       setScanStatusText('Analiza AI Vision...');
       const response = await fetch('/api/scan-esl', {
@@ -649,19 +647,16 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
       if (response.ok) {
         const data = await response.json().catch(() => ({}));
         if (data.success && Array.isArray(data.items) && data.items.length > 0) {
-          const formatted: RecognizedLabel[] = data.items.map((it: any, idx: number) => {
-            // 1. Numer referencyjny: 8 cyfr lub EAN-13, ignorujemy pionowy kod zawieszki ESL (np. 147...)
+          return data.items.map((it: any, idx: number) => {
             let ref = it.refNumber ? String(it.refNumber).replace(/\D/g, '') : '';
             if (ref.startsWith('147') && ref.length >= 13) ref = '';
             if (!ref && clientBarcode?.code) {
               ref = clientBarcode.code;
             }
 
-            // 2. Kod wagi: czyste cyfry (np. 169)
             let scale = it.scaleCode ? String(it.scaleCode).replace(/\D/g, '') : '';
             let name = (it.name || '').trim();
 
-            // Jeśli nazwa zawiera kod wagi na początku (np. "169 Wkręt uniwersalny"):
             const leadingScale = name.match(/^([0-9]{2,3})[\s\.\:\-]+(.*)/);
             if (leadingScale) {
               if (!scale) scale = leadingScale[1];
@@ -670,11 +665,10 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
             if (!name) name = clientBarcode ? 'Artykuł z kodu kreskowego' : '';
             name = correctMetalArticleName(name);
 
-            // 3. Wymiar: normalizacja z mm
             const dim = normalizeDimension(it.dimension || '');
 
             return {
-              id: `scanned_${Date.now()}_${idx}`,
+              id: `scanned_${Date.now()}_${idx}_${Math.random().toString(36).substring(2, 6)}`,
               name,
               dimension: dim,
               scaleCode: scale,
@@ -682,10 +676,6 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
               priceText: it.priceText || '',
             };
           });
-
-          handleItemsAcquired(formatted);
-          setIsScanning(false);
-          return;
         }
       }
     } catch (err: any) {
@@ -706,8 +696,6 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
     } catch (ocrErr) {
       console.warn('Błąd client-side OCR:', ocrErr);
     }
-
-    setIsScanning(false);
 
     // 4. Jeśli OCR lub dekoder kodów kreskowych odczytał dane etykiety:
     if (ocrResult || clientBarcode) {
@@ -738,23 +726,104 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
       const finalDimension = normalizeDimension(ocrResult?.dimension || '');
       const finalPrice = ocrResult?.priceText || '';
 
-      const recognizedItem: RecognizedLabel = {
-        id: `scanned_${Date.now()}`,
-        name: finalName,
-        dimension: finalDimension,
-        scaleCode: finalScale,
-        refNumber: finalRefNumber,
-        priceText: finalPrice,
-      };
-
-      handleItemsAcquired([recognizedItem]);
-      return;
+      return [
+        {
+          id: `scanned_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+          name: finalName,
+          dimension: finalDimension,
+          scaleCode: finalScale,
+          refNumber: finalRefNumber,
+          priceText: finalPrice,
+        },
+      ];
     }
 
-    // 5. Jeśli nie udało się odczytać żadnych danych z tego zdjęcia
-    setErrorMsg(
-      'Nie udało się odczytać etykiety ani kodu kreskowego z tego ujęcia. Skieruj aparat bezpośrednio na wyświetlacz ESL pod dobrym oświetleniem lub dodaj wiersz przyciskiem „Dodaj wiersz”.'
-    );
+    return [];
+  };
+
+  // Obsługa wielu plików naraz (Multi-Upload) z zachowaniem pełnej izolacji i paska postępu
+  const handleMultipleImageFiles = async (files: File[]) => {
+    if (files.length === 0) return;
+    setErrorMsg(null);
+    setIsScanning(true);
+
+    const isBatch = files.length > 1;
+    let successCount = 0;
+    const collectedItems: RecognizedLabel[] = [];
+
+    if (isBatch) {
+      setBatchProgress({
+        current: 1,
+        total: files.length,
+        currentName: files[0].name,
+        successCount: 0,
+      });
+    }
+
+    for (let i = 0; i < files.length; i++) {
+      const file = files[i];
+      if (isBatch) {
+        setBatchProgress({
+          current: i + 1,
+          total: files.length,
+          currentName: file.name,
+          successCount,
+        });
+      }
+      setScanStatusText(
+        isBatch
+          ? `Przetwarzanie etykiety ${i + 1} z ${files.length} (${file.name})...`
+          : 'Skanowanie etykiety...'
+      );
+
+      try {
+        const dataUrl = await readFileAsDataUrl(file);
+        setImagePreview(dataUrl);
+
+        // Skalowanie i cyfrowe podbicie kontrastu e-papieru
+        const enhancedBase64 = await compressImageForApi(dataUrl, 1920);
+
+        // Odczyt danych z zachowaniem 100% izolacji (bez mieszania danych z innymi plikami)
+        const recognized = await recognizeSingleEslImage(enhancedBase64, file.type || 'image/jpeg');
+        if (recognized && recognized.length > 0) {
+          collectedItems.push(...recognized);
+          successCount += recognized.length;
+          if (isBatch) {
+            setBatchProgress((prev) => (prev ? { ...prev, successCount } : null));
+          }
+        }
+      } catch (fileErr) {
+        console.warn(`Błąd podczas przetwarzania pliku ${file.name}:`, fileErr);
+      }
+    }
+
+    setIsScanning(false);
+    setBatchProgress(null);
+
+    if (collectedItems.length > 0) {
+      handleItemsAcquired(collectedItems);
+    } else {
+      setErrorMsg(
+        'Nie udało się odczytać etykiet z wybranych zdjęć. Upewnij się, że zdjęcia są ostre i przedstawiają wyświetlacze etykiet cenowych.'
+      );
+    }
+  };
+
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const fileList = e.target.files;
+    if (fileList && fileList.length > 0) {
+      const files = Array.from(fileList);
+      handleMultipleImageFiles(files);
+      e.target.value = '';
+    }
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    const files = Array.from(e.dataTransfer.files).filter((f) => f.type.startsWith('image/'));
+    if (files.length > 0) {
+      handleMultipleImageFiles(files);
+    }
   };
 
   // Centralne dodawanie pozycji: ZAWSZE na stałe natychmiastowe wgrywanie z auto-podglądem
@@ -890,12 +959,13 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
             </div>
           </div>
 
-          {/* UKRYTE INPUTY PLIKÓW I NATIVE CAMERA */}
+          {/* UKRYTE INPUTY PLIKÓW I NATIVE CAMERA ZE WSPARCIEM MULTI-UPLOAD */}
           <input
             ref={fileInputRef}
             id="esl-file-input"
             type="file"
             accept="image/*"
+            multiple
             onChange={handleFileChange}
             className="hidden"
           />
@@ -904,6 +974,7 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
             id="esl-native-camera-input"
             type="file"
             accept="image/*"
+            multiple
             capture="environment"
             onChange={handleFileChange}
             className="hidden"
@@ -912,6 +983,42 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
           {/* OBSZAR UPLOADU */}
           {activeTab === 'upload' && (
             <div className="flex flex-col gap-3">
+              {/* WSKAŹNIK POSTĘPU PRZETWARZANIA SERII ZDJĘĆ */}
+              {batchProgress && (
+                <div className="bg-slate-900 text-white rounded-2xl p-4 border border-emerald-500/50 shadow-xl flex flex-col gap-2.5 animate-in fade-in duration-200">
+                  <div className="flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-2 font-bold text-emerald-400">
+                      <RefreshCw className="w-4 h-4 animate-spin text-emerald-400" />
+                      <span>
+                        Przetwarzanie serii zdjęć ({batchProgress.current} z {batchProgress.total})
+                      </span>
+                    </div>
+                    <span className="font-mono text-xs text-emerald-300 font-bold">
+                      {Math.round((batchProgress.current / batchProgress.total) * 100)}%
+                    </span>
+                  </div>
+
+                  {/* Pasek postępu */}
+                  <div className="w-full bg-slate-800 rounded-full h-2.5 overflow-hidden p-0.5 border border-slate-700">
+                    <div
+                      className="bg-gradient-to-r from-emerald-500 to-teal-400 h-full rounded-full transition-all duration-300 shadow-[0_0_8px_rgba(52,211,153,0.5)]"
+                      style={{
+                        width: `${Math.round((batchProgress.current / batchProgress.total) * 100)}%`,
+                      }}
+                    />
+                  </div>
+
+                  <div className="flex items-center justify-between text-[11px] text-slate-400">
+                    <span className="truncate max-w-[200px] sm:max-w-md font-mono text-slate-300">
+                      Plik: {batchProgress.currentName}
+                    </span>
+                    <span className="text-emerald-300 font-semibold shrink-0">
+                      Odczytano bezbłędnie: {batchProgress.successCount}
+                    </span>
+                  </div>
+                </div>
+              )}
+
               <div
                 onDrop={handleDrop}
                 onDragOver={(e) => e.preventDefault()}
@@ -922,26 +1029,26 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
                   <ImageIcon className="w-6 h-6" />
                 </div>
                 <h4 className="font-bold text-sm text-slate-800 mb-1">
-                  Przeciągnij zdjęcie etykiety lub kliknij, aby wybrać z dysku
+                  Przeciągnij zdjęcia etykiet (jedno lub wiele naraz) albo kliknij
                 </h4>
                 <p className="text-xs text-slate-500 max-w-md mb-2">
-                  Możesz także wcisnąć <kbd className="px-1.5 py-0.5 bg-white border border-slate-300 rounded text-slate-700 font-mono text-[10px]">Ctrl + V</kbd> aby wkleić ze schowka
+                  Możesz zaznaczyć w galerii telefonem lub na dysku <strong>kilka lub kilkanaście zdjęć jednocześnie</strong>. Skaner przeanalizuje każde po kolei w pełnej rozdzielczości i bez mieszania danych.
                 </p>
 
-                <div className="flex items-center gap-2 mt-2">
+                <div className="flex flex-wrap items-center justify-center gap-2 mt-2">
                   <button
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
                       fileInputRef.current?.click();
                     }}
-                    className="px-3.5 py-1.5 bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-sm transition-all cursor-pointer active:scale-95"
                   >
-                    <Upload className="w-3.5 h-3.5 text-slate-600" />
+                    <Upload className="w-4 h-4 text-white" />
                     <span>
                       {recognizedItems.length > 0
-                        ? `Wgraj kolejne (#${recognizedItems.length + 1})`
-                        : 'Przeglądaj pliki'}
+                        ? `Wgraj kolejne zdjęcia (#${recognizedItems.length + 1})`
+                        : 'Wybierz zdjęcia (możesz wiele naraz)'}
                     </span>
                   </button>
 
@@ -951,14 +1058,10 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
                       e.stopPropagation();
                       nativeCameraInputRef.current?.click();
                     }}
-                    className="px-3.5 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
+                    className="px-3.5 py-2 bg-white hover:bg-slate-100 text-slate-800 border border-slate-300 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
                   >
-                    <Smartphone className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>
-                      {recognizedItems.length > 0
-                        ? `Kolejne aparatem (#${recognizedItems.length + 1})`
-                        : 'Zrób zdjęcie aparatem'}
-                    </span>
+                    <Smartphone className="w-4 h-4 text-emerald-600" />
+                    <span>Zrób zdjęcie aparatem</span>
                   </button>
                 </div>
               </div>
