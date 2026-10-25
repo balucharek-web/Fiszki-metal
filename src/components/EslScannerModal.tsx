@@ -548,7 +548,7 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
               if (!scale) scale = leadingScale[1];
               name = leadingScale[2].trim();
             }
-            if (!name) name = clientBarcode ? 'Artykuł z kodu kreskowego' : 'Wkręt do drewna';
+            if (!name) name = clientBarcode ? 'Artykuł z kodu kreskowego' : '';
 
             // 3. Wymiar: normalizacja z mm
             let dim = (it.dimension || '').trim();
@@ -562,7 +562,7 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
               dimension: dim,
               scaleCode: scale,
               refNumber: ref,
-              priceText: it.priceText || 'Cena',
+              priceText: it.priceText || '',
             };
           });
 
@@ -615,14 +615,14 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
         if (!finalScale) finalScale = leadingMatch[1];
         finalName = leadingMatch[2].trim();
       }
-      if (!finalName) finalName = clientBarcode ? 'Artykuł z kodu kreskowego' : 'Wkręt do drewna';
+      if (!finalName) finalName = clientBarcode ? 'Artykuł z kodu kreskowego' : '';
 
       let finalDimension = (ocrResult?.dimension || '').trim();
       if (finalDimension && !finalDimension.toLowerCase().endsWith('mm') && !finalDimension.toLowerCase().startsWith('m')) {
         finalDimension = `${finalDimension} mm`;
       }
 
-      const finalPrice = ocrResult?.priceText || 'Cena';
+      const finalPrice = ocrResult?.priceText || '';
 
       const recognizedItem: RecognizedLabel = {
         id: `scanned_${Date.now()}`,
@@ -650,11 +650,11 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
     if (autoApplyImmediately) {
       const finalItems: FiszkaItem[] = newItems.map((r) => ({
         id: r.id,
-        name: r.name.trim() || 'Wkręt do drewna',
+        name: r.name.trim() || '',
         dimension: r.dimension.trim(),
         scaleCode: r.scaleCode.trim(),
         refNumber: r.refNumber.trim(),
-        priceText: r.priceText.trim() || 'Cena',
+        priceText: r.priceText.trim() || '',
       }));
       onApply(finalItems, targetOption);
       onClose();
@@ -773,11 +773,11 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
       ...prev,
       {
         id: `custom_${Date.now()}`,
-        name: prev[prev.length - 1]?.name || 'Wkręt do drewna',
+        name: prev[prev.length - 1]?.name || '',
         dimension: '',
         scaleCode: '',
         refNumber: '',
-        priceText: 'Cena',
+        priceText: '',
       },
     ]);
   };
@@ -786,11 +786,11 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
     if (recognizedItems.length === 0) return;
     const finalItems: FiszkaItem[] = recognizedItems.map((r) => ({
       id: r.id,
-      name: r.name.trim() || 'Wkręt do drewna',
+      name: r.name.trim() || '',
       dimension: r.dimension.trim(),
       scaleCode: r.scaleCode.trim(),
       refNumber: r.refNumber.trim(),
-      priceText: r.priceText.trim() || 'Cena',
+      priceText: r.priceText.trim() || '',
     }));
 
     onApply(finalItems, targetOption);
@@ -1335,11 +1335,11 @@ export const EslScannerModal: React.FC<EslScannerModalProps> = ({
                 const activeItem = recognizedItems[selectedPreviewIndex] || recognizedItems[0];
                 const previewFiszka: FiszkaItem = {
                   id: activeItem.id,
-                  name: activeItem.name || 'Wkręt do drewna',
+                  name: activeItem.name || '',
                   dimension: activeItem.dimension || '',
                   scaleCode: activeItem.scaleCode || '',
                   refNumber: activeItem.refNumber || '',
-                  priceText: activeItem.priceText || 'Cena',
+                  priceText: activeItem.priceText || '',
                 };
 
                 return (

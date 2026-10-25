@@ -20,29 +20,9 @@ export const FiszkaCard: React.FC<FiszkaCardProps> = ({
   isPrintMode = false,
   index,
 }) => {
-  // Store previous value before field was emptied on focus
-  const [prevValues, setPrevValues] = useState<{ [key in keyof FiszkaItem]?: string }>({});
-
   const handleTextChange = (field: keyof FiszkaItem, value: string) => {
     if (onUpdate) {
       onUpdate({ [field]: value });
-    }
-  };
-
-  const handleFocus = (field: keyof FiszkaItem, currentValue: string) => {
-    // Save current value before clearing
-    setPrevValues((prev) => ({ ...prev, [field]: currentValue }));
-    // Automatically empty the field on click for fast editing
-    handleTextChange(field, '');
-  };
-
-  const handleBlur = (field: keyof FiszkaItem, currentValue: string) => {
-    // If the field is left empty without typing anything, restore the previous value
-    if (!currentValue.trim()) {
-      const original = prevValues[field];
-      if (original !== undefined && original !== '') {
-        handleTextChange(field, original);
-      }
     }
   };
 
@@ -96,11 +76,9 @@ export const FiszkaCard: React.FC<FiszkaCardProps> = ({
           {!isPrintMode ? (
             <input
               type="text"
-              value={item.name}
+              value={item.name || ''}
               onChange={(e) => handleTextChange('name', e.target.value)}
-              onFocus={() => handleFocus('name', item.name)}
-              onBlur={() => handleBlur('name', item.name)}
-              placeholder="Wkręt do drewna"
+              placeholder="Nazwa artykułu"
               className="w-full font-bold text-black bg-transparent border-b border-transparent hover:border-slate-300 focus:border-emerald-600 focus:bg-emerald-50/40 focus:outline-none transition-colors px-1 py-0.5 rounded-xs"
               style={{
                 fontSize: '4.8mm',
@@ -108,7 +86,7 @@ export const FiszkaCard: React.FC<FiszkaCardProps> = ({
                 fontFamily: "'Leroy Merlin Sans', sans-serif",
                 fontWeight: 700,
               }}
-              title="Kliknij, aby zmienić nazwę towaru (czyści się automatycznie)"
+              title="Kliknij, aby zmienić nazwę towaru"
             />
           ) : (
             <div
@@ -120,7 +98,7 @@ export const FiszkaCard: React.FC<FiszkaCardProps> = ({
                 fontWeight: 700,
               }}
             >
-              {item.name || 'Wkręt do drewna'}
+              {item.name || ''}
             </div>
           )}
         </div>
@@ -132,11 +110,9 @@ export const FiszkaCard: React.FC<FiszkaCardProps> = ({
             {!isPrintMode ? (
               <input
                 type="text"
-                value={item.dimension}
+                value={item.dimension || ''}
                 onChange={(e) => handleTextChange('dimension', e.target.value)}
-                onFocus={() => handleFocus('dimension', item.dimension)}
-                onBlur={() => handleBlur('dimension', item.dimension)}
-                placeholder="6x80 mm"
+                placeholder="Wymiar (np. 5x40 mm)"
                 className="w-full text-black bg-transparent border-b border-transparent hover:border-slate-300 focus:border-emerald-600 focus:bg-emerald-50/40 focus:outline-none transition-colors px-1 py-0.2 rounded-xs tracking-tight"
                 style={{
                   fontSize: '5.9mm',
@@ -144,7 +120,7 @@ export const FiszkaCard: React.FC<FiszkaCardProps> = ({
                   fontFamily: "'Leroy Merlin Sans', sans-serif",
                   fontWeight: 800,
                 }}
-                title="Kliknij, aby zmienić wymiar (czyści się automatycznie)"
+                title="Kliknij, aby zmienić wymiar"
               />
             ) : (
               <div
@@ -156,7 +132,7 @@ export const FiszkaCard: React.FC<FiszkaCardProps> = ({
                   fontWeight: 800,
                 }}
               >
-                {item.dimension || '6x80 mm'}
+                {item.dimension || ''}
               </div>
             )}
           </div>
@@ -190,11 +166,9 @@ export const FiszkaCard: React.FC<FiszkaCardProps> = ({
               {!isPrintMode ? (
                 <input
                   type="text"
-                  value={item.scaleCode}
+                  value={item.scaleCode || ''}
                   onChange={(e) => handleTextChange('scaleCode', e.target.value)}
-                  onFocus={() => handleFocus('scaleCode', item.scaleCode)}
-                  onBlur={() => handleBlur('scaleCode', item.scaleCode)}
-                  placeholder="247"
+                  placeholder=""
                   className="w-full text-right text-black bg-transparent border-b border-transparent hover:border-slate-500 focus:border-black focus:bg-white/40 focus:outline-none px-1 rounded-xs tracking-tight tabular-nums"
                   style={{
                     fontSize: '9.2mm',
@@ -204,7 +178,7 @@ export const FiszkaCard: React.FC<FiszkaCardProps> = ({
                     WebkitTextStroke: '0.45px currentColor',
                     textShadow: '0.25px 0 0 currentColor, -0.25px 0 0 currentColor',
                   }}
-                  title="Kliknij, aby zmienić numer na wadze (czyści się automatycznie)"
+                  title="Numer na wadze"
                 />
               ) : (
                 <span
@@ -218,7 +192,7 @@ export const FiszkaCard: React.FC<FiszkaCardProps> = ({
                     textShadow: '0.25px 0 0 currentColor, -0.25px 0 0 currentColor',
                   }}
                 >
-                  {item.scaleCode || '247'}
+                  {item.scaleCode || ''}
                 </span>
               )}
             </div>
@@ -248,21 +222,19 @@ export const FiszkaCard: React.FC<FiszkaCardProps> = ({
               {!isPrintMode ? (
                 <input
                   type="text"
-                  value={item.priceText ?? 'Cena'}
+                  value={item.priceText || ''}
                   onChange={(e) => handleTextChange('priceText', e.target.value)}
-                  onFocus={() => handleFocus('priceText', item.priceText ?? 'Cena')}
-                  onBlur={() => handleBlur('priceText', item.priceText ?? 'Cena')}
                   placeholder="Cena"
                   className="w-full text-right text-black font-bold bg-transparent border-b border-transparent hover:border-slate-300 focus:border-emerald-600 focus:bg-emerald-50/30 focus:outline-none px-1 py-0.5 rounded-xs"
                   style={{ fontSize: '3.8mm', lineHeight: 1.1, fontFamily: "'Leroy Merlin Sans', sans-serif", fontWeight: 700 }}
-                  title="Kliknij, aby zmienić tekst Cena (czyści się automatycznie)"
+                  title="Cena towaru"
                 />
               ) : (
                 <span
                   className="font-bold text-black px-1"
                   style={{ fontSize: '3.8mm', lineHeight: 1.1, fontFamily: "'Leroy Merlin Sans', sans-serif", fontWeight: 700 }}
                 >
-                  {item.priceText || 'Cena'}
+                  {item.priceText || ''}
                 </span>
               )}
             </div>
@@ -278,21 +250,19 @@ export const FiszkaCard: React.FC<FiszkaCardProps> = ({
               {!isPrintMode ? (
                 <input
                   type="text"
-                  value={item.refNumber ?? '42660256'}
+                  value={item.refNumber || ''}
                   onChange={(e) => handleTextChange('refNumber', e.target.value)}
-                  onFocus={() => handleFocus('refNumber', item.refNumber ?? '42660256')}
-                  onBlur={() => handleBlur('refNumber', item.refNumber ?? '42660256')}
-                  placeholder="42660256"
+                  placeholder=""
                   className="w-[34mm] text-right text-black font-black tracking-tight bg-transparent border-b border-transparent hover:border-slate-400 focus:border-emerald-600 focus:bg-emerald-50/40 focus:outline-none px-1 py-0.5 rounded-xs"
                   style={{ fontSize: '3.6mm', fontFamily: "'Leroy Merlin Sans', sans-serif", fontWeight: 900 }}
-                  title="Kliknij, aby zmienić numer referencji (czyści się automatycznie)"
+                  title="Numer referencyjny LM"
                 />
               ) : (
                 <span
                   className="font-black text-black tracking-tight px-1"
                   style={{ fontSize: '3.6mm', fontFamily: "'Leroy Merlin Sans', sans-serif", fontWeight: 900 }}
                 >
-                  {item.refNumber || '42660256'}
+                  {item.refNumber || ''}
                 </span>
               )}
             </div>

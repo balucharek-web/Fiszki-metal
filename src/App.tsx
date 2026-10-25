@@ -34,62 +34,13 @@ import {
 import { generateFillablePdf, downloadBlob } from './utils/pdfGenerator';
 
 const INITIAL_LABELS_7: FiszkaItem[] = [
-  {
-    id: 'fiszka_1',
-    name: 'Wkręt do drewna',
-    dimension: '6x80 mm',
-    scaleCode: '247',
-    refNumber: '42660256',
-    priceText: 'Cena',
-  },
-  {
-    id: 'fiszka_2',
-    name: 'Wkręt do drewna',
-    dimension: '5x70 mm',
-    scaleCode: '246',
-    refNumber: '42660255',
-    priceText: 'Cena',
-  },
-  {
-    id: 'fiszka_3',
-    name: 'Wkręt do drewna',
-    dimension: '5x60 mm',
-    scaleCode: '245',
-    refNumber: '42660254',
-    priceText: 'Cena',
-  },
-  {
-    id: 'fiszka_4',
-    name: 'Wkręt do drewna',
-    dimension: '4.5x50 mm',
-    scaleCode: '244',
-    refNumber: '42660253',
-    priceText: 'Cena',
-  },
-  {
-    id: 'fiszka_5',
-    name: 'Wkręt do drewna',
-    dimension: '4x40 mm',
-    scaleCode: '243',
-    refNumber: '42660252',
-    priceText: 'Cena',
-  },
-  {
-    id: 'fiszka_6',
-    name: 'Wkręt do drewna',
-    dimension: '3.5x30 mm',
-    scaleCode: '242',
-    refNumber: '42660251',
-    priceText: 'Cena',
-  },
-  {
-    id: 'fiszka_7',
-    name: 'Wkręt do drewna',
-    dimension: '3.5x25 mm',
-    scaleCode: '241',
-    refNumber: '42660250',
-    priceText: 'Cena',
-  },
+  { id: 'fiszka_1', name: '', dimension: '', scaleCode: '', refNumber: '', priceText: '' },
+  { id: 'fiszka_2', name: '', dimension: '', scaleCode: '', refNumber: '', priceText: '' },
+  { id: 'fiszka_3', name: '', dimension: '', scaleCode: '', refNumber: '', priceText: '' },
+  { id: 'fiszka_4', name: '', dimension: '', scaleCode: '', refNumber: '', priceText: '' },
+  { id: 'fiszka_5', name: '', dimension: '', scaleCode: '', refNumber: '', priceText: '' },
+  { id: 'fiszka_6', name: '', dimension: '', scaleCode: '', refNumber: '', priceText: '' },
+  { id: 'fiszka_7', name: '', dimension: '', scaleCode: '', refNumber: '', priceText: '' },
 ];
 
 export default function App() {
@@ -98,7 +49,15 @@ export default function App() {
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        if (Array.isArray(parsed) && parsed.length >= 7) return parsed;
+        if (Array.isArray(parsed) && parsed.length >= 7) {
+          // Jeśli w pamięci przeglądarki są stare przykładowe dane wkrętów (247-241 / 42660256), zastępujemy je czystym arkuszem
+          const isOldDemo = parsed.some(
+            (p: FiszkaItem) => (p.scaleCode === '247' && p.dimension === '6x80 mm') || p.refNumber === '42660256'
+          );
+          if (!isOldDemo) {
+            return parsed;
+          }
+        }
       } catch {
         // fallback
       }
@@ -268,29 +227,28 @@ export default function App() {
 
   // Kopiowanie nazwy pierwszej fiszki do wszystkich
   const handleCopyFirstNameToAll = () => {
-    const firstName = items[0]?.name || 'Wkręt do drewna';
+    const firstName = items[0]?.name || '';
+    if (!firstName) return;
     setItems((prev) => prev.map((it) => ({ ...it, name: firstName })));
   };
 
   // Numerowanie wag kolejno (+1)
   const handleRenumberCodes = () => {
-    const startCode = parseInt(items[0]?.scaleCode) || 240;
+    const startCode = parseInt(items[0]?.scaleCode || '') || 1;
     setItems((prev) =>
       prev.map((it, idx) => ({ ...it, scaleCode: String(startCode + idx) }))
     );
   };
 
-  // Dodanie nowej strony A4 (7 nowych fiszek)
+  // Dodanie nowej strony A4 (7 nowych czystych fiszek)
   const handleAddPage = () => {
-    const lastItem = items[items.length - 1];
-    const lastCode = parseInt(lastItem?.scaleCode) || (240 + items.length - 1);
     const newItems: FiszkaItem[] = Array.from({ length: 7 }, (_, idx) => ({
       id: `fiszka_${items.length + idx + 1}_${Date.now()}`,
-      name: lastItem?.name || 'Wkręt do drewna',
+      name: '',
       dimension: '',
-      scaleCode: String(lastCode + idx + 1),
+      scaleCode: '',
       refNumber: '',
-      priceText: 'Cena',
+      priceText: '',
     }));
     setItems((prev) => [...prev, ...newItems]);
     setTimeout(() => {
@@ -313,15 +271,17 @@ export default function App() {
 
   // Wyczyszczenie pól na stronie
   const handleClearPage = (pageIdx: number) => {
-    if (window.confirm(`Wyczyścić wymiary i kody na stronie ${pageIdx + 1}?`)) {
+    if (window.confirm(`Wyczyścić wszystkie fiszki na stronie ${pageIdx + 1}?`)) {
       setItems((prev) =>
         prev.map((it, idx) => {
           if (idx >= pageIdx * 7 && idx < (pageIdx + 1) * 7) {
             return {
               ...it,
+              name: '',
               dimension: '',
               scaleCode: '',
               refNumber: '',
+              priceText: '',
             };
           }
           return it;
@@ -330,9 +290,9 @@ export default function App() {
     }
   };
 
-  // Reset do 1 domyślnej strony
+  // Reset do 1 domyślnej czystej strony
   const handleReset = () => {
-    if (window.confirm('Czy chcesz zresetować wszystkie fiszki do wzorca początkowego (1 strona)?')) {
+    if (window.confirm('Czy chcesz zresetować wszystkie fiszki do czystego arkusza (1 strona)?')) {
       setItems(INITIAL_LABELS_7);
     }
   };
@@ -404,11 +364,11 @@ export default function App() {
       while (padded.length < needed) {
         padded.push({
           id: `fiszka_pad_${Date.now()}_${padded.length}`,
-          name: scannedItems[0]?.name || 'Wkręt do drewna',
+          name: '',
           dimension: '',
           scaleCode: '',
           refNumber: '',
-          priceText: 'Cena',
+          priceText: '',
         });
       }
       setItems(padded);
@@ -424,11 +384,11 @@ export default function App() {
       while (padded.length < needed) {
         padded.push({
           id: `fiszka_pad_${Date.now()}_${padded.length}`,
-          name: scannedItems[0]?.name || 'Wkręt do drewna',
+          name: '',
           dimension: '',
           scaleCode: '',
           refNumber: '',
-          priceText: 'Cena',
+          priceText: '',
         });
       }
       setItems((prev) => [...prev, ...padded]);
@@ -470,11 +430,11 @@ export default function App() {
           while (currentSlot >= next.length) {
             const pageToAdd = Array.from({ length: 7 }, (_, idx) => ({
               id: `fiszka_ext_${Date.now()}_${next.length + idx}`,
-              name: si.name || 'Wkręt do drewna',
+              name: '',
               dimension: '',
               scaleCode: '',
               refNumber: '',
-              priceText: 'Cena',
+              priceText: '',
             }));
             next.push(...pageToAdd);
           }
@@ -518,11 +478,11 @@ export default function App() {
           while (targetIdx >= next.length) {
             const pageToAdd = Array.from({ length: 7 }, (_, idx) => ({
               id: `fiszka_ext_${Date.now()}_${next.length + idx}`,
-              name: si.name || 'Wkręt do drewna',
+              name: '',
               dimension: '',
               scaleCode: '',
               refNumber: '',
-              priceText: 'Cena',
+              priceText: '',
             }));
             next.push(...pageToAdd);
           }
@@ -583,7 +543,7 @@ export default function App() {
             dimension: '',
             scaleCode: '',
             refNumber: '',
-            priceText: 'Cena',
+            priceText: '',
           }))
         : items;
 

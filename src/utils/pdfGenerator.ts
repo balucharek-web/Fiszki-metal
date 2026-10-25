@@ -114,7 +114,7 @@ export async function generateFillablePdf(
         dimension: '',
         scaleCode: '',
         refNumber: '',
-        priceText: 'Cena',
+        priceText: '',
       };
 
       // In PDF coordinates, (0,0) is bottom-left
